@@ -1,0 +1,1043 @@
+
+
+mapfab(raw, "yee.mapfab", "chr", "palette", "metatiles", "level")
+
+ct U NUM_PLAYERS = 4
+
+ct UU player_char_width = 8
+ct UU player_char_height = 12
+ct UU PLAYER_HEAD_OFFSET = 4
+ct UU PLAYER_BODY_HEIGHT = 12
+
+ct UU[NUM_PLAYERS] player_initial_x = UU[NUM_PLAYERS](40,60,80,100)
+ct UU[NUM_PLAYERS] player_initial_y = UU[NUM_PLAYERS](140,120,120,120)
+
+ct U pass_through_mt = 10
+
+ct U katana_kill_min = 123
+ct U katana_kill_max = 127
+ct U GROUND_ACCEL = 2
+ct U AIR_ACCEL = 1
+ct U GROUND_FRICTION = 3
+ct U GROUND_TURN_DECEL = 4
+ct U AIR_TURN_DECEL = 2
+ct U MAX_SPEED = 24
+ct U GRAVITY_JUMP_HELD = 3
+ct U GRAVITY_JUMP_RELEASED = 12
+ct U GRAVITY_FALL = 5
+ct U JUMP_START_VEL = 70
+ct U MAX_FALL_SPEED = 50
+ct U HITSTOP_FRAMES = 0
+ct U KILL_FLASH_FRAMES = 10
+ct U KILL_FLASH_COLOR = $30
+ct U RESPAWN_FRAMES = 120
+ct U DEATH_EFFECT_FRAMES = 30
+ct U NUM_DEATH_PARTICLES = 4
+ct U TOTAL_DEATH_PARTICLES = 16
+ct U DEATH_PARTICLE_TILE = 227
+ct U DEATH_PARTICLE_GRAVITY = 2
+ct U DEATH_PARTICLE_MAX_FALL_SPEED = 32
+ct U CORPSE_LEFT_TILE = 218
+ct U CORPSE_RIGHT_TILE = 219
+ct U CORPSE_Y_OFFSET = 4
+ct U CORPSE_WIDTH = 16
+ct U CORPSE_HEIGHT = 4
+ct U CORPSE_X_SPEED = 28
+ct U CORPSE_Y_SPEED = 42
+ct U CORPSE_GRAVITY = 4
+ct U CORPSE_MAX_FALL_SPEED = 32
+ct U[NUM_DEATH_PARTICLES] death_particle_start_x_vel = U[NUM_DEATH_PARTICLES](12,20,12,20)
+ct U[NUM_DEATH_PARTICLES] death_particle_start_y_vel = U[NUM_DEATH_PARTICLES](28,36,36,28)
+ct U[NUM_DEATH_PARTICLES] death_particle_start_dir = U[NUM_DEATH_PARTICLES](64,64,0,0)
+ct U[NUM_PLAYERS] sprite_palette_offset = U[NUM_PLAYERS](12,15,18,21)
+ct U[10] chr_sprt_table = U[10](192, 208, 193, 209, 194, 210, 195, 211, 196, 212)
+ct U[3] katana_sprite_table = U[3](224,225,226)
+ct U[2] sprite_running_anim = U[2](1,2)
+
+
+
+vars /game_vars
+    CCC/levels lvl1_mt_map // level 1 metatile map and its tiles correspondence
+    CC/metatiles mt_nw
+    CC/metatiles mt_ne
+    CC/metatiles mt_sw
+    CC/metatiles mt_se
+    CC/metatiles mt_attr
+
+    U[NUM_PLAYERS] face        = U[NUM_PLAYERS](0,0,0,0)
+    U[NUM_PLAYERS] want_face   = U[NUM_PLAYERS](0,0,0,0)
+
+    U[NUM_PLAYERS] katana_time = U[NUM_PLAYERS](120,120,120,120)
+    U[NUM_PLAYERS] death_timer = U[NUM_PLAYERS](0,0,0,0)
+    U hitstop_timer = 0
+    Bool palette_dirty = false
+    U[NUM_PLAYERS] kill_flash_timer = U[NUM_PLAYERS](0,0,0,0)
+    U[NUM_PLAYERS] kill_flash_original_0
+    U[NUM_PLAYERS] kill_flash_original_1
+    U[NUM_PLAYERS] kill_flash_original_2
+
+    UU[TOTAL_DEATH_PARTICLES] death_particle_x
+    UU[TOTAL_DEATH_PARTICLES] death_particle_y
+    U[TOTAL_DEATH_PARTICLES] death_particle_x_vel
+    U[TOTAL_DEATH_PARTICLES] death_particle_y_vel
+    U[TOTAL_DEATH_PARTICLES] death_particle_dir
+    U[TOTAL_DEATH_PARTICLES] death_particle_owner
+    U[TOTAL_DEATH_PARTICLES] death_particle_timer
+    Bool[TOTAL_DEATH_PARTICLES] death_particle_moving_up
+
+    U[NUM_PLAYERS] corpse_state = U[NUM_PLAYERS](0,0,0,0) // 0 hidden, 1 flying, 2 landed
+    UU[NUM_PLAYERS] corpse_x
+    UU[NUM_PLAYERS] corpse_y
+    U[NUM_PLAYERS] corpse_x_vel
+    U[NUM_PLAYERS] corpse_y_vel
+    U[NUM_PLAYERS] corpse_dir
+    U[NUM_PLAYERS] corpse_face
+    Bool[NUM_PLAYERS] corpse_moving_up = Bool[NUM_PLAYERS](false,false,false,false)
+
+    Bool[NUM_PLAYERS] is_player_on_ground = Bool[NUM_PLAYERS](false,false,false,false)
+    Bool[NUM_PLAYERS] y_moving_up          = Bool[NUM_PLAYERS](false,false,false,false)
+    Bool[NUM_PLAYERS] jump_controlled      = Bool[NUM_PLAYERS](false,false,false,false)
+    Bool[NUM_PLAYERS] is_turning = Bool[NUM_PLAYERS](false,false,false,false)
+
+    UU[NUM_PLAYERS] player_x_vel = UU[NUM_PLAYERS](0,0,0,0)
+    UU[NUM_PLAYERS] player_y_vel = UU[NUM_PLAYERS](0,0,0,0)
+
+
+    UU[NUM_PLAYERS] knockback_x_vel = UU[NUM_PLAYERS](0,0,0,0)
+    UU[NUM_PLAYERS] knockback_y_vel = UU[NUM_PLAYERS](0,0,0,0)
+    U [NUM_PLAYERS] knockback_dir  = U[NUM_PLAYERS](0,0,0,0) // 0 = höger, 64 = vänster
+
+    UU[NUM_PLAYERS] player_x = UU[NUM_PLAYERS](
+        player_initial_x[0] << 4,
+        player_initial_x[1] << 4,
+        player_initial_x[2] << 4,
+        player_initial_x[3] << 4
+    )
+
+    UU[NUM_PLAYERS] player_y = UU[NUM_PLAYERS](
+        player_initial_y[0]<< 4,
+        player_initial_y[1] << 4,
+        player_initial_y[2] << 4,
+        player_initial_y[3] << 4
+    )
+
+
+    UU[NUM_PLAYERS] old_x = UU[NUM_PLAYERS](0,0,0,0)
+    UU[NUM_PLAYERS] old_y = UU[NUM_PLAYERS](0,0,0,0)
+
+    U[NUM_PLAYERS] player_sprite = U[NUM_PLAYERS](0,0,0,0)
+
+    U[NUM_PLAYERS] anim_timer = U[NUM_PLAYERS](0,0,0,0)
+    U[NUM_PLAYERS] anim_frame_index = U[NUM_PLAYERS](0,0,0,0) 
+    
+/*
+Writes the initial 32x30 screen. Take note the mapfab is (16*4)H x 16V. 
+It has a 16th row of tiles that will never be seen to make multiplications
+by its height a power of two.
+*/
+fn load_screen(CCC/levels my_lvl_pointer)
+    U chr_bank = read U(my_lvl_pointer)
+    CCC/palettes pal=read CCC/palettes(my_lvl_pointer)
+    CC/metatiles mymetatiles=read CC/metatiles(my_lvl_pointer)
+    UU size = UU(read U(my_lvl_pointer)) // width in metatiles of screen
+    //after all these reads, now my_lvl_pointer points to the metatiles matrix
+
+    // set palette
+    load_palette(pal)
+    ppu_upload_palette()
+       
+    UU mt_size = UU(read U(mymetatiles)) // number of metatiles
+    if mt_size == 0
+        mt_size = 256
+
+    lvl1_mt_map=my_lvl_pointer // the map is set in columns. it's in level.macrofab
+    
+    mt_nw=mymetatiles
+    mt_ne=mt_nw
+    mt_ne+=mt_size
+    mt_sw=mt_ne
+    mt_sw+=mt_size
+    mt_se=mt_sw
+    mt_se+=mt_size
+    mt_attr=mt_se
+    mt_attr+=mt_size
+    // now every pointer points where it should
+
+    ppu_reset_addr($2000) // first screen // https://www.nesdev.org/wiki/Mirroring
+
+    {PPUSTATUS}() // Reset the address latch before 'ppu_set_addr', just to be safe.
+    {PPUCTRL}(PPUCTRL_VRAM_32_DOWN) // Used to write columns of data.
+
+    // upload first namespace data
+    UU i=0
+    UU ii=0
+
+    for UU x=0; x<16; x+=1
+        ppu_reset_addr($2000+ii)
+        for UU y=0; y<16; y+=1
+            U my_metatile=my_lvl_pointer{i}
+            U nw_tile=mt_nw[my_metatile]
+            U sw_tile=mt_sw[my_metatile]
+            {PPUDATA}(nw_tile)
+            {PPUDATA}(sw_tile)
+            i+=1
+        i-=16
+        ii+=1
+        ppu_reset_addr($2000+ii)
+        for UU y=0; y<16; y+=1
+            U my_metatile=my_lvl_pointer{i}
+            U ne_tile=mt_ne[my_metatile]
+            U se_tile=mt_se[my_metatile]
+            {PPUDATA}(ne_tile)
+            {PPUDATA}(se_tile)
+            i+=1
+        ii+=1
+
+    //upload first attributes data, we need to OR it together
+    //for every 2x2 metatiles block (https://www.nesdev.org/wiki/PPU_attribute_tables)
+    i=0
+    ii=0
+    for UU a=0; a<8; a+=1
+        for UU attri=0; attri<32; attri+=8
+            ppu_reset_addr($2000+960+a+attri)
+            U my_metatile=my_lvl_pointer{i} //tl
+            U my_attr=mt_attr[my_metatile]
+            //
+            my_metatile=my_lvl_pointer{i+16} // tr
+            my_attr|=(mt_attr[my_metatile]<<2)
+            //
+            my_metatile=my_lvl_pointer{i+1} //bl
+            my_attr|=(mt_attr[my_metatile]<<4)
+            //
+            my_metatile=my_lvl_pointer{i+17} //br
+            my_attr|=(mt_attr[my_metatile]<<6)
+            //
+            {PPUDATA}(my_attr)
+            //
+            my_metatile=my_lvl_pointer{i+8} //tl
+            my_attr=mt_attr[my_metatile]
+            //
+            my_metatile=my_lvl_pointer{i+16+8} // tr
+            my_attr|=(mt_attr[my_metatile]<<2)
+            //
+            my_metatile=my_lvl_pointer{i+1+8} //bl
+            my_attr|=(mt_attr[my_metatile]<<4)
+            //
+            my_metatile=my_lvl_pointer{i+17+8} //br
+            my_attr|=(mt_attr[my_metatile]<<6)
+            //
+            {PPUDATA}(my_attr)
+            i+=2
+        ii+=32
+        i=ii
+
+
+nmi main_nmi()
+    // Update OAM and poll the pads:
+    ppu_upload_oam_poll_pads(0)
+
+    if palette_dirty
+        ppu_upload_palette()
+        palette_dirty = false
+
+    // Turn on rendering:
+    {PPUMASK}(PPUMASK_ON | PPUMASK_NO_CLIP)
+
+    // Reset the scroll https://www.nesdev.org/wiki/PPU_scrolling
+    // and https://www.nesdev.org/wiki/Mirroring
+    ppu_reset_scroll_16(0, 0)
+    
+mode main()
+: nmi main_nmi
+
+    load_screen(@lev_level1) // the name lev_level1 is defined in the levels.macrofab
+    // Tell the NES to trigger NMI once per frame:
+    {PPUCTRL}(PPUCTRL_NMI_ON)
+
+    // Wait forever, one frame at a time:
+    while true
+        update_pads()
+        if hitstop_timer > 0
+            hitstop_timer -= 1
+        else
+            update_death_timers()
+            update_death_effects()
+            update_corpses()
+            update_kill_flash()
+            for U p=0; p < NUM_PLAYERS; p+=1
+                if death_timer[p] == 0
+                    move_player_x(p)
+                    move_player_y(p)
+            check_katanas()
+        update_sprites()
+        nmi // Wait for the next NMI
+
+fn check_katanas()
+    U[NUM_PLAYERS] hits = U[NUM_PLAYERS](0)
+    U clash_mask = 0
+    U death_mask = 0
+
+    // Collect sword-on-sword clashes without changing attack state.
+    for U a = 0; a < NUM_PLAYERS; a += 1
+        if death_timer[a] > 0
+            continue
+        if katana_time[a] <= katana_kill_min || katana_time[a] >= katana_kill_max
+            continue
+
+        for U b = a + 1; b < NUM_PLAYERS; b += 1
+            if death_timer[b] > 0
+                continue
+            if katana_time[b] <= katana_kill_min || katana_time[b] >= katana_kill_max
+                continue
+
+            if katana_overlap(a, b)
+                clash_mask |= U(1) << a
+                clash_mask |= U(1) << b
+
+    // Collect every player hit. A player can hit several targets in one frame.
+    for U attacker = 0; attacker < NUM_PLAYERS; attacker += 1
+        if death_timer[attacker] > 0
+            continue
+        if katana_time[attacker] >= katana_kill_min && katana_time[attacker] <= katana_kill_max
+            for U target = 0; target < NUM_PLAYERS; target += 1
+                if attacker != target
+                    if death_timer[target] == 0
+                        if player_katana_hits_another_player(attacker, target)
+                            hits[attacker] |= U(1) << target
+
+    // Reciprocal player hits are also clashes.
+    for U a = 0; a < NUM_PLAYERS; a += 1
+        for U b = a + 1; b < NUM_PLAYERS; b += 1
+            if hits[a] & (U(1) << b)
+                if hits[b] & (U(1) << a)
+                    clash_mask |= U(1) << a
+                    clash_mask |= U(1) << b
+
+    // A clash cancels every outgoing hit from the clashing player.
+    for U p = 0; p < NUM_PLAYERS; p += 1
+        if clash_mask & (U(1) << p)
+            katana_clash_player(p)
+        else
+            death_mask |= hits[p]
+
+    // Resolve all remaining deaths simultaneously.
+    for U victim = 0; victim < NUM_PLAYERS; victim += 1
+        if death_mask & (U(1) << victim)
+            U killer = victim
+
+            for U attacker = 0; attacker < NUM_PLAYERS; attacker += 1
+                if !(clash_mask & (U(1) << attacker))
+                    if hits[attacker] & (U(1) << victim)
+                        killer = attacker
+                        break
+
+            start_player_death(victim, killer)
+
+fn start_player_death(U p, U attacker)
+    death_timer[p] = RESPAWN_FRAMES
+    hitstop_timer = HITSTOP_FRAMES
+    spawn_death_particles(p)
+    start_player_corpse(p, attacker)
+    start_kill_flash(p)
+    katana_time[p] = 120
+    player_x_vel[p] = 0
+    player_y_vel[p] = 0
+    knockback_x_vel[p] = 0
+    knockback_y_vel[p] = 0
+    is_player_on_ground[p] = false
+    y_moving_up[p] = false
+    jump_controlled[p] = false
+    is_turning[p] = false
+
+fn start_player_corpse(U p, U attacker)
+    corpse_state[p] = 1
+
+    if player_x[p] > 64
+        corpse_x[p] = player_x[p] - 64
+    else
+        corpse_x[p] = player_x[p]
+
+    corpse_y[p] = player_y[p] + (UU(CORPSE_Y_OFFSET) << 4)
+    corpse_x_vel[p] = CORPSE_X_SPEED
+    corpse_y_vel[p] = CORPSE_Y_SPEED
+    corpse_face[p] = want_face[p]
+    corpse_moving_up[p] = true
+
+    // Throw the body in the direction of the killing attack.
+    corpse_dir[p] = want_face[attacker]
+
+fn player_sprite_palette_offset(U p) U
+    return sprite_palette_offset[p]
+
+fn start_kill_flash(U p)
+    U offset = player_sprite_palette_offset(p)
+
+    kill_flash_original_0[p] = palette[offset]
+    kill_flash_original_1[p] = palette[offset + 1]
+    kill_flash_original_2[p] = palette[offset + 2]
+
+    set_kill_flash_palette(p)
+    kill_flash_timer[p] = KILL_FLASH_FRAMES
+
+fn set_kill_flash_palette(U p)
+    U offset = player_sprite_palette_offset(p)
+
+    palette[offset] = KILL_FLASH_COLOR
+    palette[offset + 1] = KILL_FLASH_COLOR
+    palette[offset + 2] = KILL_FLASH_COLOR
+    palette_dirty = true
+
+fn restore_kill_flash_palette(U p)
+    U offset = player_sprite_palette_offset(p)
+
+    palette[offset] = kill_flash_original_0[p]
+    palette[offset + 1] = kill_flash_original_1[p]
+    palette[offset + 2] = kill_flash_original_2[p]
+    palette_dirty = true
+
+fn update_kill_flash()
+    for U p = 0; p < NUM_PLAYERS; p += 1
+        if kill_flash_timer[p] > 0
+            kill_flash_timer[p] -= 1
+
+            if kill_flash_timer[p] == 0
+                restore_kill_flash_palette(p)
+            else if kill_flash_timer[p] & 1
+                set_kill_flash_palette(p)
+            else
+                restore_kill_flash_palette(p)
+
+fn respawn_player(U p)
+    player_x[p] = player_initial_x[p] << 4
+    player_y[p] = player_initial_y[p] << 4
+    player_x_vel[p] = 0
+    player_y_vel[p] = 0
+    knockback_x_vel[p] = 0
+    knockback_y_vel[p] = 0
+    katana_time[p] = 120
+    player_sprite[p] = 0
+    anim_timer[p] = 0
+    anim_frame_index[p] = 0
+    is_player_on_ground[p] = false
+    y_moving_up[p] = false
+    jump_controlled[p] = false
+    is_turning[p] = false
+
+fn update_death_timers()
+    for U p = 0; p < NUM_PLAYERS; p += 1
+        if death_timer[p] > 0
+            death_timer[p] -= 1
+            if death_timer[p] == 0
+                respawn_player(p)
+
+fn update_corpses()
+    for U p = 0; p < NUM_PLAYERS; p += 1
+        if corpse_state[p] != 1
+            continue
+
+        if corpse_dir[p] == 0
+            corpse_x[p] += corpse_x_vel[p]
+        else
+            if corpse_x[p] > corpse_x_vel[p]
+                corpse_x[p] -= corpse_x_vel[p]
+            else
+                corpse_x[p] = 0
+                corpse_x_vel[p] = 0
+
+        if corpse_x_vel[p] > 0
+            corpse_x_vel[p] -= 1
+
+        if corpse_moving_up[p]
+            if corpse_y_vel[p] > CORPSE_GRAVITY
+                corpse_y_vel[p] -= CORPSE_GRAVITY
+                corpse_y[p] -= corpse_y_vel[p]
+            else
+                corpse_y_vel[p] = 0
+                corpse_moving_up[p] = false
+        else
+            corpse_y_vel[p] += CORPSE_GRAVITY
+            if corpse_y_vel[p] > CORPSE_MAX_FALL_SPEED
+                corpse_y_vel[p] = CORPSE_MAX_FALL_SPEED
+
+            UU old_y = corpse_y[p]
+            corpse_y[p] += corpse_y_vel[p]
+
+            UU old_py = old_y >> 4
+            UU new_py = corpse_y[p] >> 4
+
+            if new_py > old_py
+                UU wanted = new_py - old_py
+                UU allowed = 0
+
+                for UU step = 1; step <= wanted; step += 1
+                    if is_corpse_ground_at_pixel(corpse_x[p] >> 4, old_py + step)
+                        break
+                    allowed += 1
+
+                if allowed < wanted
+                    corpse_y[p] = (old_py + allowed) << 4
+                    corpse_y_vel[p] = 0
+                    corpse_state[p] = 2
+
+fn spawn_death_particles(U p)
+    U first = p << 2
+
+    for U particle = 0; particle < NUM_DEATH_PARTICLES; particle += 1
+        U i = first + particle
+        death_particle_x[i] = player_x[p] + 64
+        death_particle_y[i] = player_y[p] + 96
+        death_particle_x_vel[i] = death_particle_start_x_vel[particle]
+        death_particle_y_vel[i] = death_particle_start_y_vel[particle]
+        death_particle_dir[i] = death_particle_start_dir[particle]
+        death_particle_owner[i] = p
+        death_particle_timer[i] = DEATH_EFFECT_FRAMES
+        death_particle_moving_up[i] = true
+
+fn update_death_effects()
+    for U i = 0; i < TOTAL_DEATH_PARTICLES; i += 1
+        if death_particle_timer[i] == 0
+            continue
+
+        death_particle_timer[i] -= 1
+
+        if death_particle_dir[i] == 0
+            death_particle_x[i] += death_particle_x_vel[i]
+        else
+            death_particle_x[i] -= death_particle_x_vel[i]
+
+        if death_particle_x_vel[i] > 0
+            death_particle_x_vel[i] -= 1
+
+        if death_particle_moving_up[i]
+            if death_particle_y_vel[i] > DEATH_PARTICLE_GRAVITY
+                death_particle_y_vel[i] -= DEATH_PARTICLE_GRAVITY
+                death_particle_y[i] -= death_particle_y_vel[i]
+            else
+                death_particle_y_vel[i] = 0
+                death_particle_moving_up[i] = false
+        else
+            death_particle_y_vel[i] += DEATH_PARTICLE_GRAVITY
+            if death_particle_y_vel[i] > DEATH_PARTICLE_MAX_FALL_SPEED
+                death_particle_y_vel[i] = DEATH_PARTICLE_MAX_FALL_SPEED
+            death_particle_y[i] += death_particle_y_vel[i]
+
+fn katana_overlap(U a, U b) Bool
+
+    // -------------------------
+    // Katana A (top-left)
+    // -------------------------
+    UU ax
+    if want_face[a] == 0
+        ax = (player_x[a] >> 4) + 8
+    else
+        ax = (player_x[a] >> 4) - 8
+
+    UU ay = (player_y[a] >> 4) + 4
+    UU aw = 8
+    UU ah = 8
+
+
+    // -------------------------
+    // Katana B (top-left)
+    // -------------------------
+    UU bx
+    if want_face[b] == 0
+        bx = (player_x[b] >> 4) + 8
+    else
+        bx = (player_x[b] >> 4) - 8
+
+    UU by = (player_y[b] >> 4) + 4
+    UU bw = 8
+    UU bh = 8
+
+
+    // -------------------------
+    // EXACT same logic as player-hit
+    // -------------------------
+    if ax < bx + bw
+        if ax + aw > bx
+            if ay < by + bh
+                if ay + ah > by
+                    return true
+
+    return false
+
+fn katana_clash_player(U p)
+    katana_time[p] = 90
+    player_x_vel[p] = 0
+    knockback_x_vel[p] = 40
+    knockback_y_vel[p] = 64
+
+    // Knock the player backwards, away from their own attack direction.
+    if want_face[p] == 0
+        knockback_dir[p] = 64
+    else
+        knockback_dir[p] = 0
+
+fn draw_player(U p, U i) U
+    U pcx = U(player_x[p] >> 4)
+    U pcy = U(player_y[p] >> 4)
+    U sprite_top = chr_sprt_table[player_sprite[p] << 1]
+    U sprite_bottom = chr_sprt_table[(player_sprite[p] << 1) + 1]
+
+    if katana_time[p] != 120
+        sprite_top += 5
+        sprite_bottom += 5
+
+    set_oam_x(i, pcx)
+    set_oam_y(i, pcy)
+    set_oam_p(i, sprite_top)
+    set_oam_a(i, p + want_face[p])
+    i += 4
+
+    set_oam_x(i, pcx)
+    set_oam_y(i, pcy + 8)
+    set_oam_p(i, sprite_bottom)
+    set_oam_a(i, p + want_face[p])
+    i += 4
+
+    if katana_time[p] > 120
+        if want_face[p] > 0
+            set_oam_x(i, pcx - 8)
+        else
+            set_oam_x(i, pcx + 8)
+
+        set_oam_y(i, pcy + 9)
+        set_oam_a(i, 1 + want_face[p])
+
+        if katana_time[p] >= 128
+            set_oam_p(i, katana_sprite_table[2])
+        else if katana_time[p] >= 123
+            set_oam_p(i, katana_sprite_table[1])
+        else
+            set_oam_p(i, katana_sprite_table[0])
+        i += 4
+
+    return i
+
+fn draw_death_effects(U i) U
+    // Simulate four particles per death, but draw only one each frame.
+    for U p = 0; p < NUM_PLAYERS; p += 1
+        if death_timer[p] > 0
+            U particle = (p << 2) + (death_timer[p] & U(3))
+            if death_particle_timer[particle] > 0
+                set_oam_x(i, U(death_particle_x[particle] >> 4))
+                set_oam_y(i, U(death_particle_y[particle] >> 4))
+                set_oam_p(i, DEATH_PARTICLE_TILE)
+                set_oam_a(i, p)
+                i += 4
+
+    return i
+
+fn draw_corpses(U i) U
+    for U p = 0; p < NUM_PLAYERS; p += 1
+        if corpse_state[p] == 0
+            continue
+
+        U pcx = U(corpse_x[p] >> 4)
+        U pcy = U(corpse_y[p] >> 4)
+
+        if corpse_face[p] == 0
+            set_oam_x(i, pcx)
+            set_oam_y(i, pcy)
+            set_oam_p(i, CORPSE_LEFT_TILE)
+            set_oam_a(i, p)
+            i += 4
+
+            set_oam_x(i, pcx + 8)
+            set_oam_y(i, pcy)
+            set_oam_p(i, CORPSE_RIGHT_TILE)
+            set_oam_a(i, p)
+            i += 4
+        else
+            set_oam_x(i, pcx)
+            set_oam_y(i, pcy)
+            set_oam_p(i, CORPSE_RIGHT_TILE)
+            set_oam_a(i, p + 64)
+            i += 4
+
+            set_oam_x(i, pcx + 8)
+            set_oam_y(i, pcy)
+            set_oam_p(i, CORPSE_LEFT_TILE)
+            set_oam_a(i, p + 64)
+            i += 4
+
+    return i
+
+fn update_sprites()
+    U i = 0
+
+    for U p = 0; p < NUM_PLAYERS; p += 1
+        if death_timer[p] == 0
+            i = draw_player(p, i)
+
+    i = draw_corpses(i)
+    i = draw_death_effects(i)
+
+    // Clear the remainder of OAM
+    hide_oam(i)
+
+// this function calculates the movements of the player character
+fn move_player_x(U p)
+    normal_x_mov(p)
+    apply_position_x_subpixel(p)
+    // --------------------------------
+    // KATANA
+    // --------------------------------
+    if katana_time[p] < 120
+        katana_time[p] += 1
+    if katana_time[p] > 120
+        katana_time[p] += 1
+        if katana_time[p] > 130
+            katana_time[p] = 90
+    if (pads[p].pressed & BUTTON_B) && katana_time[p] == 120
+        katana_time[p] = 121
+
+
+fn normal_x_mov(U p)
+    // --------------------------------
+    // FACE
+    // --------------------------------
+    if pads[p].held & BUTTON_LEFT
+        want_face[p] = 64
+        is_turning[p] = (face[p] != 64)
+    else if pads[p].held & BUTTON_RIGHT
+        want_face[p] = 0
+        is_turning[p] = (face[p] != 0)
+    else
+        if !is_turning[p]
+            want_face[p] = face[p]   // ingen input
+
+    // --------------------------------
+    // ANIMATION
+    // --------------------------------
+    if  pads[p].held & BUTTON_LEFT || pads[p].held & BUTTON_RIGHT
+        player_sprite[p] = sprite_running_anim[anim_frame_index[p]]
+        anim_timer[p] += 1
+        if anim_timer[p] > 3
+            anim_timer[p] = 0
+            anim_frame_index[p] += 1
+            if anim_frame_index[p] > 1
+                anim_frame_index[p] = 0
+    else
+        anim_timer[p] = 0
+        anim_frame_index[p] = 0
+        player_sprite[p] = 0
+
+    // --------------------------------
+    // ACCELERATION
+    // --------------------------------
+
+    U accel = GROUND_ACCEL
+    if !is_player_on_ground[p]
+        accel = AIR_ACCEL
+
+    if pads[p].held & BUTTON_LEFT || pads[p].held & BUTTON_RIGHT
+        if is_player_on_ground[p]
+            if want_face[p] == face[p]
+                // normal mark-acc
+                player_x_vel[p] += accel
+            // annars: låt TURN BRAKE sköta det
+        else
+            // LUFT: alltid påverkan
+            if want_face[p] == face[p]
+                player_x_vel[p] += accel      // luft-acc
+            else
+                if player_x_vel[p] > AIR_TURN_DECEL
+                    player_x_vel[p] -= AIR_TURN_DECEL
+                else
+                    player_x_vel[p] = 0
+                    face[p] = want_face[p]
+                    is_turning[p] = false
+
+
+    // TURN BRAKE – ENDAST PÅ MARKEN
+    if is_player_on_ground[p] && want_face[p] != face[p]
+        if player_x_vel[p] > GROUND_TURN_DECEL
+            player_x_vel[p] -= GROUND_TURN_DECEL
+        else
+            player_x_vel[p] = 0
+            face[p] = want_face[p]
+
+    if player_x_vel[p] > MAX_SPEED
+        player_x_vel[p] = MAX_SPEED
+    
+fn apply_position_x_subpixel(U p)
+    // 1. Save old position
+    old_x[p] = player_x[p]
+
+    // --------------------------------------------------
+    // 2. PLAYER FORCE (magnitud + riktning)
+    // --------------------------------------------------
+    UU player_force = player_x_vel[p]
+    U  player_dir   = face[p]
+
+    // --------------------------------------------------
+    // 3. KNOCKBACK FORCE
+    // --------------------------------------------------
+    Bool has_kb = (knockback_x_vel[p] > 0)
+    UU kb_force = 0
+    U  kb_dir   = 0
+
+    if has_kb
+        kb_force = knockback_x_vel[p]
+        kb_dir   = knockback_dir[p]
+
+    // --------------------------------------------------
+    // 4. COMBINE FORCES (unsigned vector math)
+    // --------------------------------------------------
+    UU total_force
+    U  force_dir
+
+    if !has_kb
+        total_force = player_force
+        force_dir   = player_dir
+    else
+        if kb_dir == player_dir
+            // same direction → add
+            total_force = player_force + kb_force
+            force_dir   = player_dir
+        else
+            // opposite directions → subtract
+            if kb_force > player_force
+                total_force = kb_force - player_force
+                force_dir   = kb_dir
+            else
+                total_force = player_force - kb_force
+                force_dir   = player_dir
+
+    // --------------------------------------------------
+    // 5. CLAMP
+    // --------------------------------------------------
+    
+    if has_kb
+        if total_force > (MAX_SPEED + MAX_SPEED)
+            total_force = MAX_SPEED + MAX_SPEED
+    else if total_force > MAX_SPEED
+        total_force = MAX_SPEED
+
+    // --------------------------------------------------
+    // 6. APPLY MOVEMENT
+    // --------------------------------------------------
+    if force_dir == 0
+        player_x[p] += total_force
+    else
+        player_x[p] -= total_force
+
+    // --------------------------------------------------
+    // 7. PIXEL-STEP COLLISION (din befintliga kod)
+    // --------------------------------------------------
+    UU old_px = old_x[p] >> 4
+    UU new_px = player_x[p] >> 4
+
+    if force_dir == 0 && new_px > old_px
+        UU wanted = new_px - old_px
+        UU allowed = 0
+        for UU step = 1; step <= wanted; step += 1
+            if is_wall_at_pixel(p, old_px + step + player_char_width - 1)
+                break
+            allowed += 1
+        if allowed < wanted
+            player_x[p] = (old_px + allowed) << 4
+            player_x_vel[p] = 0
+            knockback_x_vel[p] = 0
+
+    if force_dir == 64 && old_px > new_px
+        UU wanted = old_px - new_px
+        UU allowed = 0
+        for UU step = 1; step <= wanted; step += 1
+            if is_wall_at_pixel(p, old_px - step)
+                break
+            allowed += 1
+        if allowed < wanted
+            player_x[p] = (old_px - allowed) << 4
+            player_x_vel[p] = 0
+            knockback_x_vel[p] = 0
+
+    // --------------------------------------------------
+    // 8. FRICTION (ENDAST NÄR INGEN INPUT & PÅ MARKEN)
+    // --------------------------------------------------
+    if is_player_on_ground[p]
+        if !(pads[p].held & BUTTON_LEFT) && !(pads[p].held & BUTTON_RIGHT)
+            if player_x_vel[p] > GROUND_FRICTION
+                player_x_vel[p] -= GROUND_FRICTION
+            else
+                player_x_vel[p] = 0
+
+    // --------------------------------------------------
+    // 9. DECAY KNOCKBACK
+    // --------------------------------------------------
+    if has_kb
+        if knockback_x_vel[p] > 0
+            knockback_x_vel[p] -= 2
+
+fn move_player_y(U p)
+    normal_y_mov(p)
+
+        
+
+fn normal_y_mov(U p)
+    if (pads[p].pressed & BUTTON_A) && is_player_on_ground[p]
+        player_y_vel[p] = JUMP_START_VEL
+        y_moving_up[p] = true
+        jump_controlled[p] = true
+        is_player_on_ground[p] = false
+
+    // Releasing A commits the jump to the stronger upward gravity.
+    if y_moving_up[p] && jump_controlled[p] && !(pads[p].held & BUTTON_A)
+        jump_controlled[p] = false
+
+    if knockback_y_vel[p] > 0
+        player_y_vel[p] += knockback_y_vel[p]
+        y_moving_up[p] = true
+        jump_controlled[p] = false
+        is_player_on_ground[p] = false
+        knockback_y_vel[p] = 0
+
+    apply_position_y_subpixel(p)
+
+fn apply_position_y_subpixel(U p)
+    if y_moving_up[p]
+        U gravity = GRAVITY_JUMP_RELEASED
+        if jump_controlled[p]
+            gravity = GRAVITY_JUMP_HELD
+
+        if player_y_vel[p] > gravity
+            player_y_vel[p] -= gravity
+        else
+            player_y_vel[p] = 0
+            y_moving_up[p] = false
+            jump_controlled[p] = false
+    else
+        player_y_vel[p] += GRAVITY_FALL
+        if player_y_vel[p] > MAX_FALL_SPEED
+            player_y_vel[p] = MAX_FALL_SPEED
+
+    // 4. SAVE OLD POSITION
+    old_y[p] = player_y[p]
+
+    // 5. APPLY VELOCITY
+    if y_moving_up[p]
+        player_y[p] -= player_y_vel[p]
+    else
+        player_y[p] += player_y_vel[p]
+
+    // 6. PIXEL DELTA
+    UU old_py = old_y[p] >> 4
+    UU new_py = player_y[p] >> 4
+
+    // ---- FALL / GROUND ----
+    if new_py > old_py
+        UU wanted = new_py - old_py
+        UU allowed = 0
+
+        for UU step = 1; step <= wanted; step += 1
+            if is_ground_at_pixel(p,old_py + step)
+                break
+            allowed += 1
+
+        if allowed < wanted
+            player_y[p] = (old_py + allowed) << 4
+            player_y_vel[p] = 0
+            is_player_on_ground[p] = true
+            jump_controlled[p] = false
+        else
+            is_player_on_ground[p] = false
+
+    // ---- TAK ----
+    if old_py > new_py
+        UU wanted = old_py - new_py
+        UU allowed = 0
+
+        for UU step = 1; step <= wanted; step += 1
+            if is_ceiling_at_pixel(p,old_py - step)
+                break
+            allowed += 1
+
+        if allowed < wanted
+            player_y[p] = (old_py - allowed) << 4
+            player_y_vel[p] = 0
+            y_moving_up[p] = false
+            jump_controlled[p] = false
+
+fn ppu_reset_scroll_16(UU x, UU y)
+    ppu_reset_scroll(x.a, y.a) // the 9th bits should go to ppuctrl right after
+    {PPUCTRL}(PPUCTRL_NMI_ON | (x.b & 1) | ((y.b & 1)<<1))  // Set PPU control register, we want NMIs
+
+// returns the map metatile at screen pixel position (x, y)
+fn get_mt_at_pix(UU x, UU y) U
+    UU disp= ((x >> 4) << 4) + (y >> 4)
+    U mt=lvl1_mt_map{disp}
+    return mt
+
+fn is_wall_at_pixel(U p, UU px) Bool
+    UU py_top    = (player_y[p] >> 4) + PLAYER_HEAD_OFFSET + 1
+    UU py_bottom = py_top + PLAYER_BODY_HEIGHT - 1
+
+    if get_mt_at_pix(px, py_top) >= pass_through_mt
+        return true
+    if get_mt_at_pix(px, py_bottom) >= pass_through_mt
+        return true
+    return false
+
+fn is_ground_at_pixel(U p, UU py) Bool
+    UU px_left  = player_x[p] >> 4
+    UU px_right = px_left + player_char_width - 1
+
+    UU test_y = py + PLAYER_BODY_HEIGHT + PLAYER_HEAD_OFFSET
+
+    if get_mt_at_pix(px_left, test_y) >= pass_through_mt
+        return true
+    if get_mt_at_pix(px_right, test_y) >= pass_through_mt
+        return true
+    return false
+
+fn is_corpse_ground_at_pixel(UU px_left, UU py) Bool
+    UU px_right = px_left + UU(CORPSE_WIDTH) - 1
+    UU test_y = py + UU(CORPSE_HEIGHT)
+
+    if get_mt_at_pix(px_left, test_y) >= pass_through_mt
+        return true
+    if get_mt_at_pix(px_right, test_y) >= pass_through_mt
+        return true
+    return false
+
+fn is_ceiling_at_pixel(U p, UU py) Bool
+    UU head_y = py + PLAYER_HEAD_OFFSET +1
+
+    UU px_left  = player_x[p] >> 4
+    UU px_right = px_left + player_char_width - 1
+
+    if get_mt_at_pix(px_left, head_y) >= pass_through_mt
+        return true
+    if get_mt_at_pix(px_right, head_y) >= pass_through_mt
+        return true
+    return false
+
+
+fn player_katana_hits_another_player(U player, U target) Bool
+    // katana hitbox (sprite-bas)
+    UU katana_x
+    if want_face[player] == 0
+        katana_x = (player_x[player] >> 4) + 8
+    else
+        katana_x = (player_x[player] >> 4) - 8
+
+    UU katana_y = (player_y[player] >> 4) + 4
+    UU katana_w = 8
+    UU katana_h = 8
+
+    // target hitbox = sprite-box
+    UU target_w = player_char_width
+    UU target_h = player_char_height
+
+    UU target_x = player_x[target] >> 4
+    UU target_y = player_y[target] >> 4
+
+    if katana_x < target_x + target_w
+        if katana_x + katana_w > target_x
+            if katana_y < target_y + target_h
+                if katana_y + katana_h > target_y
+                    return true
+
+    return false

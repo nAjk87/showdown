@@ -1,0 +1,13 @@
+.DS_Store
+
+# Build outputs
+*.nes
+*.chr
+
+# Local tools / binaries
+*.exe
+macfab/
+
+# Scratch art exports
+*-test.xcf
+*-effects.png
