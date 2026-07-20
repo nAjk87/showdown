@@ -1,4 +1,5 @@
 # Showdown
+<img width="700" height="513" alt="image" src="https://github.com/user-attachments/assets/6e55f5b9-4237-40d9-844c-13845354ae80" />
 
 A local multiplayer NES ninja fighting game written in NESfab.
 
