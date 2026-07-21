@@ -5,7 +5,7 @@ mapfab(raw, "yee.mapfab", "chr", "palette", "metatiles", "level")
 ct U NUM_PLAYERS = 4
 
 ct UU player_char_width = 8
-ct UU player_char_height = 12
+ct UU player_char_height = 16
 ct UU PLAYER_HEAD_OFFSET = 4
 ct UU PLAYER_BODY_HEIGHT = 12
 
@@ -16,6 +16,10 @@ ct U pass_through_mt = 10
 
 ct U katana_kill_min = 123
 ct U katana_kill_max = 127
+ct U KATANA_RIGHT = 0
+ct U KATANA_LEFT = 64
+ct U KATANA_UP = 1
+ct U KATANA_DOWN = 2
 ct U GROUND_ACCEL = 2
 ct U AIR_ACCEL = 1
 ct U GROUND_FRICTION = 3
@@ -52,6 +56,7 @@ ct U[NUM_DEATH_PARTICLES] death_particle_start_dir = U[NUM_DEATH_PARTICLES](64,6
 ct U[NUM_PLAYERS] sprite_palette_offset = U[NUM_PLAYERS](12,15,18,21)
 ct U[10] chr_sprt_table = U[10](192, 208, 193, 209, 194, 210, 195, 211, 196, 212)
 ct U[3] katana_sprite_table = U[3](224,225,226)
+ct U[3] katana_vertical_sprite_table = U[3](228,229,230)
 ct U[2] sprite_running_anim = U[2](1,2)
 
 
@@ -68,6 +73,7 @@ vars /game_vars
     U[NUM_PLAYERS] want_face   = U[NUM_PLAYERS](0,0,0,0)
 
     U[NUM_PLAYERS] katana_time = U[NUM_PLAYERS](120,120,120,120)
+    U[NUM_PLAYERS] katana_dir = U[NUM_PLAYERS](0,0,0,0)
     U[NUM_PLAYERS] death_timer = U[NUM_PLAYERS](0,0,0,0)
     U hitstop_timer = 0
     Bool palette_dirty = false
@@ -281,13 +287,13 @@ fn check_katanas()
     for U a = 0; a < NUM_PLAYERS; a += 1
         if death_timer[a] > 0
             continue
-        if katana_time[a] <= katana_kill_min || katana_time[a] >= katana_kill_max
+        if katana_time[a] < katana_kill_min || katana_time[a] > katana_kill_max
             continue
 
         for U b = a + 1; b < NUM_PLAYERS; b += 1
             if death_timer[b] > 0
                 continue
-            if katana_time[b] <= katana_kill_min || katana_time[b] >= katana_kill_max
+            if katana_time[b] < katana_kill_min || katana_time[b] > katana_kill_max
                 continue
 
             if katana_overlap(a, b)
@@ -304,14 +310,6 @@ fn check_katanas()
                     if death_timer[target] == 0
                         if player_katana_hits_another_player(attacker, target)
                             hits[attacker] |= U(1) << target
-
-    // Reciprocal player hits are also clashes.
-    for U a = 0; a < NUM_PLAYERS; a += 1
-        for U b = a + 1; b < NUM_PLAYERS; b += 1
-            if hits[a] & (U(1) << b)
-                if hits[b] & (U(1) << a)
-                    clash_mask |= U(1) << a
-                    clash_mask |= U(1) << b
 
     // A clash cancels every outgoing hit from the clashing player.
     for U p = 0; p < NUM_PLAYERS; p += 1
@@ -363,8 +361,11 @@ fn start_player_corpse(U p, U attacker)
     corpse_face[p] = want_face[p]
     corpse_moving_up[p] = true
 
-    // Throw the body in the direction of the killing attack.
-    corpse_dir[p] = want_face[attacker]
+    // Throw the body horizontally in the direction of the killing attack.
+    if katana_dir[attacker] == KATANA_RIGHT || katana_dir[attacker] == KATANA_LEFT
+        corpse_dir[p] = katana_dir[attacker]
+    else
+        corpse_dir[p] = want_face[attacker]
 
 fn player_sprite_palette_offset(U p) U
     return sprite_palette_offset[p]
@@ -415,6 +416,7 @@ fn respawn_player(U p)
     knockback_x_vel[p] = 0
     knockback_y_vel[p] = 0
     katana_time[p] = 120
+    katana_dir[p] = face[p]
     player_sprite[p] = 0
     anim_timer[p] = 0
     anim_frame_index[p] = 0
@@ -523,37 +525,16 @@ fn update_death_effects()
 
 fn katana_overlap(U a, U b) Bool
 
-    // -------------------------
-    // Katana A (top-left)
-    // -------------------------
-    UU ax
-    if want_face[a] == 0
-        ax = (player_x[a] >> 4) + 8
-    else
-        ax = (player_x[a] >> 4) - 8
+    UU ax = katana_clash_hitbox_x(a)
+    UU ay = katana_clash_hitbox_y(a)
+    UU aw = katana_clash_hitbox_w(a)
+    UU ah = katana_clash_hitbox_h(a)
 
-    UU ay = (player_y[a] >> 4) + 4
-    UU aw = 8
-    UU ah = 8
+    UU bx = katana_clash_hitbox_x(b)
+    UU by = katana_clash_hitbox_y(b)
+    UU bw = katana_clash_hitbox_w(b)
+    UU bh = katana_clash_hitbox_h(b)
 
-
-    // -------------------------
-    // Katana B (top-left)
-    // -------------------------
-    UU bx
-    if want_face[b] == 0
-        bx = (player_x[b] >> 4) + 8
-    else
-        bx = (player_x[b] >> 4) - 8
-
-    UU by = (player_y[b] >> 4) + 4
-    UU bw = 8
-    UU bh = 8
-
-
-    // -------------------------
-    // EXACT same logic as player-hit
-    // -------------------------
     if ax < bx + bw
         if ax + aw > bx
             if ay < by + bh
@@ -561,6 +542,81 @@ fn katana_overlap(U a, U b) Bool
                     return true
 
     return false
+
+fn katana_hitbox_base_x(U p) UU
+    UU px = player_x[p] >> 4
+
+    if katana_dir[p] == KATANA_RIGHT
+        return px + 8
+    if katana_dir[p] == KATANA_LEFT
+        if px > 8
+            return px - 8
+        return 0
+
+    return px
+
+fn katana_player_hitbox_x(U p) UU
+    return katana_hitbox_base_x(p)
+
+fn katana_clash_hitbox_x(U p) UU
+    UU px = player_x[p] >> 4
+
+    if katana_dir[p] == KATANA_RIGHT
+        return px + 4
+    if katana_dir[p] == KATANA_LEFT
+        if px > 8
+            return px - 8
+        return 0
+
+    return katana_hitbox_base_x(p)
+
+fn katana_hitbox_base_y(U p) UU
+    UU py = player_y[p] >> 4
+
+    if katana_dir[p] == KATANA_UP
+        if py > 8
+            return py - 8
+        return 0
+    if katana_dir[p] == KATANA_DOWN
+        return py + 16
+
+    return py + 4
+
+fn katana_player_hitbox_y(U p) UU
+    if katana_dir[p] == KATANA_RIGHT || katana_dir[p] == KATANA_LEFT
+        return (player_y[p] >> 4) + 7
+
+    return katana_hitbox_base_y(p)
+
+fn katana_clash_hitbox_y(U p) UU
+    if katana_dir[p] == KATANA_RIGHT || katana_dir[p] == KATANA_LEFT
+        return (player_y[p] >> 4) + 8
+
+    return katana_hitbox_base_y(p)
+
+fn katana_player_hitbox_w(U p) UU
+    if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
+        return 8
+
+    return 8
+
+fn katana_clash_hitbox_w(U p) UU
+    if katana_dir[p] == KATANA_RIGHT || katana_dir[p] == KATANA_LEFT
+        return 12
+
+    return 8
+
+fn katana_player_hitbox_h(U p) UU
+    if katana_dir[p] == KATANA_RIGHT || katana_dir[p] == KATANA_LEFT
+        return 5
+
+    return 8
+
+fn katana_clash_hitbox_h(U p) UU
+    if katana_dir[p] == KATANA_RIGHT || katana_dir[p] == KATANA_LEFT
+        return 3
+
+    return 8
 
 fn katana_clash_player(U p)
     katana_time[p] = 90
@@ -597,20 +653,60 @@ fn draw_player(U p, U i) U
     i += 4
 
     if katana_time[p] > 120
-        if want_face[p] > 0
-            set_oam_x(i, pcx - 8)
-        else
-            set_oam_x(i, pcx + 8)
+        U katana_x = pcx + 8
+        U katana_y = pcy + 9
+        U katana_attr = 1
+        U katana_tile = katana_sprite_table[0]
 
-        set_oam_y(i, pcy + 9)
-        set_oam_a(i, 1 + want_face[p])
+        if katana_dir[p] == KATANA_LEFT
+            katana_x = pcx - 8
+        else if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
+            if want_face[p] == KATANA_LEFT
+                if pcx > 6
+                    katana_x = pcx - 6
+                else
+                    katana_x = 0
+            else
+                if katana_dir[p] == KATANA_DOWN
+                    katana_x = pcx + 7
+                else
+                    katana_x = pcx + 6
+
+        if katana_dir[p] == KATANA_UP
+            if pcy > 8
+                katana_y = pcy - 4
+            else
+                katana_y = 0
+        else if katana_dir[p] == KATANA_DOWN
+            katana_y = pcy + 16
+
+        if katana_dir[p] == KATANA_LEFT
+            katana_attr = 1 + ATTR_H_FLIP
+        else if katana_dir[p] == KATANA_UP
+            katana_attr = 1 + ATTR_V_FLIP
+            if want_face[p] == KATANA_LEFT
+                katana_attr += ATTR_H_FLIP
+        else if katana_dir[p] == KATANA_DOWN
+            if want_face[p] == KATANA_LEFT
+                katana_attr += ATTR_H_FLIP
 
         if katana_time[p] >= 128
-            set_oam_p(i, katana_sprite_table[2])
+            if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
+                katana_tile = katana_vertical_sprite_table[2]
+            else
+                katana_tile = katana_sprite_table[2]
         else if katana_time[p] >= 123
-            set_oam_p(i, katana_sprite_table[1])
+            if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
+                katana_tile = katana_vertical_sprite_table[1]
+            else
+                katana_tile = katana_sprite_table[1]
         else
-            set_oam_p(i, katana_sprite_table[0])
+            if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
+                katana_tile = katana_vertical_sprite_table[0]
+            else
+                katana_tile = katana_sprite_table[0]
+
+        set_oam(i, katana_x, katana_y, katana_tile, katana_attr)
         i += 4
 
     return i
@@ -691,6 +787,12 @@ fn move_player_x(U p)
         if katana_time[p] > 130
             katana_time[p] = 90
     if (pads[p].pressed & BUTTON_B) && katana_time[p] == 120
+        if pads[p].held & BUTTON_UP
+            katana_dir[p] = KATANA_UP
+        else if pads[p].held & BUTTON_DOWN
+            katana_dir[p] = KATANA_DOWN
+        else
+            katana_dir[p] = want_face[p]
         katana_time[p] = 121
 
 
@@ -1016,16 +1118,10 @@ fn is_ceiling_at_pixel(U p, UU py) Bool
 
 
 fn player_katana_hits_another_player(U player, U target) Bool
-    // katana hitbox (sprite-bas)
-    UU katana_x
-    if want_face[player] == 0
-        katana_x = (player_x[player] >> 4) + 8
-    else
-        katana_x = (player_x[player] >> 4) - 8
-
-    UU katana_y = (player_y[player] >> 4) + 4
-    UU katana_w = 8
-    UU katana_h = 8
+    UU katana_x = katana_player_hitbox_x(player)
+    UU katana_y = katana_player_hitbox_y(player)
+    UU katana_w = katana_player_hitbox_w(player)
+    UU katana_h = katana_player_hitbox_h(player)
 
     // target hitbox = sprite-box
     UU target_w = player_char_width
