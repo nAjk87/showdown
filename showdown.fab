@@ -31,6 +31,12 @@ ct U GRAVITY_JUMP_RELEASED = 12
 ct U GRAVITY_FALL = 5
 ct U JUMP_START_VEL = 70
 ct U MAX_FALL_SPEED = 50
+ct U WALL_NONE = 255
+ct U WALL_SLIDE_MAX_FALL_SPEED = 14
+ct U WALL_JUMP_X_SPEED = 24
+ct U WALL_JUMP_Y_SPEED = 70
+ct U WALL_JUMP_LOCK_FRAMES = 3
+ct U WALL_JUMP_GRACE_FRAMES = 8
 ct U HITSTOP_FRAMES = 0
 ct U KILL_FLASH_FRAMES = 10
 ct U KILL_FLASH_COLOR = $30
@@ -101,12 +107,16 @@ vars /game_vars
     Bool[NUM_PLAYERS] corpse_moving_up = Bool[NUM_PLAYERS](false,false,false,false)
 
     Bool[NUM_PLAYERS] is_player_on_ground = Bool[NUM_PLAYERS](false,false,false,false)
+    Bool[NUM_PLAYERS] is_wall_sliding      = Bool[NUM_PLAYERS](false,false,false,false)
     Bool[NUM_PLAYERS] y_moving_up          = Bool[NUM_PLAYERS](false,false,false,false)
     Bool[NUM_PLAYERS] jump_controlled      = Bool[NUM_PLAYERS](false,false,false,false)
     Bool[NUM_PLAYERS] is_turning = Bool[NUM_PLAYERS](false,false,false,false)
 
     UU[NUM_PLAYERS] player_x_vel = UU[NUM_PLAYERS](0,0,0,0)
     UU[NUM_PLAYERS] player_y_vel = UU[NUM_PLAYERS](0,0,0,0)
+    U[NUM_PLAYERS] wall_jump_lock_timer = U[NUM_PLAYERS](0,0,0,0)
+    U[NUM_PLAYERS] wall_jump_grace_timer = U[NUM_PLAYERS](0,0,0,0)
+    U[NUM_PLAYERS] wall_jump_grace_dir = U[NUM_PLAYERS](255,255,255,255)
 
 
     UU[NUM_PLAYERS] knockback_x_vel = UU[NUM_PLAYERS](0,0,0,0)
@@ -343,9 +353,13 @@ fn start_player_death(U p, U attacker)
     knockback_x_vel[p] = 0
     knockback_y_vel[p] = 0
     is_player_on_ground[p] = false
+    is_wall_sliding[p] = false
     y_moving_up[p] = false
     jump_controlled[p] = false
     is_turning[p] = false
+    wall_jump_lock_timer[p] = 0
+    wall_jump_grace_timer[p] = 0
+    wall_jump_grace_dir[p] = WALL_NONE
 
 fn start_player_corpse(U p, U attacker)
     corpse_state[p] = 1
@@ -421,9 +435,13 @@ fn respawn_player(U p)
     anim_timer[p] = 0
     anim_frame_index[p] = 0
     is_player_on_ground[p] = false
+    is_wall_sliding[p] = false
     y_moving_up[p] = false
     jump_controlled[p] = false
     is_turning[p] = false
+    wall_jump_lock_timer[p] = 0
+    wall_jump_grace_timer[p] = 0
+    wall_jump_grace_dir[p] = WALL_NONE
 
 fn update_death_timers()
     for U p = 0; p < NUM_PLAYERS; p += 1
@@ -857,6 +875,10 @@ fn normal_x_mov(U p)
     if !is_player_on_ground[p]
         accel = AIR_ACCEL
 
+    if wall_jump_lock_timer[p] > 0
+        wall_jump_lock_timer[p] -= 1
+        return
+
     if pads[p].held & BUTTON_LEFT || pads[p].held & BUTTON_RIGHT
         if is_player_on_ground[p]
             if want_face[p] == face[p]
@@ -1002,11 +1024,46 @@ fn move_player_y(U p)
         
 
 fn normal_y_mov(U p)
+    Bool was_on_ground = is_player_on_ground[p]
+    U wall_dir = wall_contact_dir(p)
+
+    if wall_dir != WALL_NONE
+        wall_jump_grace_timer[p] = WALL_JUMP_GRACE_FRAMES
+        wall_jump_grace_dir[p] = wall_dir
+
     if (pads[p].pressed & BUTTON_A) && is_player_on_ground[p]
         player_y_vel[p] = JUMP_START_VEL
         y_moving_up[p] = true
         jump_controlled[p] = true
         is_player_on_ground[p] = false
+
+    if (pads[p].pressed & BUTTON_A) && !was_on_ground
+        if wall_dir == WALL_NONE
+            if wall_jump_grace_timer[p] > 0
+                wall_dir = wall_jump_grace_dir[p]
+
+        if wall_dir != WALL_NONE
+            if !y_moving_up[p] || player_y_vel[p] == 0
+                player_y_vel[p] = WALL_JUMP_Y_SPEED
+                y_moving_up[p] = true
+                jump_controlled[p] = true
+                is_wall_sliding[p] = false
+                wall_jump_lock_timer[p] = WALL_JUMP_LOCK_FRAMES
+                wall_jump_grace_timer[p] = 0
+                wall_jump_grace_dir[p] = WALL_NONE
+
+                if wall_dir == KATANA_LEFT
+                    face[p] = KATANA_RIGHT
+                    want_face[p] = KATANA_RIGHT
+                else
+                    face[p] = KATANA_LEFT
+                    want_face[p] = KATANA_LEFT
+
+                player_x_vel[p] = WALL_JUMP_X_SPEED
+
+    if wall_dir == WALL_NONE
+        if wall_jump_grace_timer[p] > 0
+            wall_jump_grace_timer[p] -= 1
 
     // Releasing A commits the jump to the stronger upward gravity.
     if y_moving_up[p] && jump_controlled[p] && !(pads[p].held & BUTTON_A)
@@ -1022,6 +1079,8 @@ fn normal_y_mov(U p)
     apply_position_y_subpixel(p)
 
 fn apply_position_y_subpixel(U p)
+    is_wall_sliding[p] = false
+
     if y_moving_up[p]
         U gravity = GRAVITY_JUMP_RELEASED
         if jump_controlled[p]
@@ -1035,8 +1094,13 @@ fn apply_position_y_subpixel(U p)
             jump_controlled[p] = false
     else
         player_y_vel[p] += GRAVITY_FALL
-        if player_y_vel[p] > MAX_FALL_SPEED
-            player_y_vel[p] = MAX_FALL_SPEED
+        if wall_jump_lock_timer[p] == 0 && wall_contact_dir(p) != WALL_NONE
+            is_wall_sliding[p] = true
+            if player_y_vel[p] > WALL_SLIDE_MAX_FALL_SPEED
+                player_y_vel[p] = WALL_SLIDE_MAX_FALL_SPEED
+        else
+            if player_y_vel[p] > MAX_FALL_SPEED
+                player_y_vel[p] = MAX_FALL_SPEED
 
     // 4. SAVE OLD POSITION
     old_y[p] = player_y[p]
@@ -1065,6 +1129,7 @@ fn apply_position_y_subpixel(U p)
             player_y[p] = (old_py + allowed) << 4
             player_y_vel[p] = 0
             is_player_on_ground[p] = true
+            is_wall_sliding[p] = false
             jump_controlled[p] = false
         else
             is_player_on_ground[p] = false
@@ -1083,6 +1148,7 @@ fn apply_position_y_subpixel(U p)
             player_y[p] = (old_py - allowed) << 4
             player_y_vel[p] = 0
             y_moving_up[p] = false
+            is_wall_sliding[p] = false
             jump_controlled[p] = false
 
 fn ppu_reset_scroll_16(UU x, UU y)
@@ -1104,6 +1170,20 @@ fn is_wall_at_pixel(U p, UU px) Bool
     if get_mt_at_pix(px, py_bottom) >= pass_through_mt
         return true
     return false
+
+fn wall_contact_dir(U p) U
+    UU px_left = player_x[p] >> 4
+
+    if pads[p].held & BUTTON_LEFT
+        if px_left > 0
+            if is_wall_at_pixel(p, px_left - 1)
+                return KATANA_LEFT
+
+    if pads[p].held & BUTTON_RIGHT
+        if is_wall_at_pixel(p, px_left + player_char_width)
+            return KATANA_RIGHT
+
+    return WALL_NONE
 
 fn is_ground_at_pixel(U p, UU py) Bool
     UU px_left  = player_x[p] >> 4
