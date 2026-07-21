@@ -556,6 +556,13 @@ fn katana_hitbox_base_x(U p) UU
     return px
 
 fn katana_player_hitbox_x(U p) UU
+    UU px = player_x[p] >> 4
+
+    if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
+        if want_face[p] == KATANA_LEFT
+            return px
+        return px + 4
+
     return katana_hitbox_base_x(p)
 
 fn katana_clash_hitbox_x(U p) UU
@@ -567,6 +574,10 @@ fn katana_clash_hitbox_x(U p) UU
         if px > 8
             return px - 8
         return 0
+    if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
+        if want_face[p] == KATANA_LEFT
+            return px
+        return px + 5
 
     return katana_hitbox_base_x(p)
 
@@ -589,20 +600,30 @@ fn katana_player_hitbox_y(U p) UU
     return katana_hitbox_base_y(p)
 
 fn katana_clash_hitbox_y(U p) UU
+    UU py = player_y[p] >> 4
+
     if katana_dir[p] == KATANA_RIGHT || katana_dir[p] == KATANA_LEFT
-        return (player_y[p] >> 4) + 8
+        return py + 8
+    if katana_dir[p] == KATANA_UP
+        if py > 8
+            return py - 8
+        return 0
+    if katana_dir[p] == KATANA_DOWN
+        return py + 12
 
     return katana_hitbox_base_y(p)
 
 fn katana_player_hitbox_w(U p) UU
     if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
-        return 8
+        return 5
 
     return 8
 
 fn katana_clash_hitbox_w(U p) UU
     if katana_dir[p] == KATANA_RIGHT || katana_dir[p] == KATANA_LEFT
         return 12
+    if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
+        return 3
 
     return 8
 
@@ -615,6 +636,8 @@ fn katana_player_hitbox_h(U p) UU
 fn katana_clash_hitbox_h(U p) UU
     if katana_dir[p] == KATANA_RIGHT || katana_dir[p] == KATANA_LEFT
         return 3
+    if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
+        return 12
 
     return 8
 
