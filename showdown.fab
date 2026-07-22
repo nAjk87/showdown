@@ -1,6 +1,6 @@
 
 
-mapfab(raw, "yee.mapfab", "chr", "palette", "metatiles", "level")
+mapfab(raw, "yee2.mapfab", "chr", "palette", "metatiles", "level")
 
 ct U NUM_PLAYERS = 4
 
@@ -37,6 +37,10 @@ ct U WALL_JUMP_X_SPEED = 24
 ct U WALL_JUMP_Y_SPEED = 70
 ct U WALL_JUMP_LOCK_FRAMES = 3
 ct U WALL_JUMP_GRACE_FRAMES = 8
+ct UU WORLD_WIDTH_PIXELS = 256
+ct UU WORLD_WIDTH_SUBPIXELS = 4096
+ct UU WORLD_HEIGHT_PIXELS = 240
+ct UU WORLD_HEIGHT_SUBPIXELS = 3840
 ct U HITSTOP_FRAMES = 0
 ct U KILL_FLASH_FRAMES = 10
 ct U KILL_FLASH_COLOR = $30
@@ -543,6 +547,60 @@ fn update_death_effects()
                 death_particle_y_vel[i] = DEATH_PARTICLE_MAX_FALL_SPEED
             death_particle_y[i] += death_particle_y_vel[i]
 
+fn x_in_wrapped_range(UU x, UU range_x, UU range_w) Bool
+    if x >= WORLD_WIDTH_PIXELS
+        x -= WORLD_WIDTH_PIXELS
+    if range_x >= WORLD_WIDTH_PIXELS
+        range_x -= WORLD_WIDTH_PIXELS
+
+    UU range_end = range_x + range_w
+    if range_end <= WORLD_WIDTH_PIXELS
+        if x >= range_x && x < range_end
+            return true
+    else
+        range_end -= WORLD_WIDTH_PIXELS
+        if x >= range_x || x < range_end
+            return true
+
+    return false
+
+fn x_ranges_overlap_wrapped(UU ax, UU aw, UU bx, UU bw) Bool
+    for UU step = 0; step < aw; step += 1
+        if x_in_wrapped_range(ax + step, bx, bw)
+            return true
+
+    return false
+
+fn y_in_wrapped_range(UU y, UU range_y, UU range_h) Bool
+    if y >= WORLD_HEIGHT_PIXELS
+        y -= WORLD_HEIGHT_PIXELS
+    if range_y >= WORLD_HEIGHT_PIXELS
+        range_y -= WORLD_HEIGHT_PIXELS
+
+    UU range_end = range_y + range_h
+    if range_end <= WORLD_HEIGHT_PIXELS
+        if y >= range_y && y < range_end
+            return true
+    else
+        range_end -= WORLD_HEIGHT_PIXELS
+        if y >= range_y || y < range_end
+            return true
+
+    return false
+
+fn y_ranges_overlap_wrapped(UU ay, UU ah, UU by, UU bh) Bool
+    for UU step = 0; step < ah; step += 1
+        if y_in_wrapped_range(ay + step, by, bh)
+            return true
+
+    return false
+
+fn wrap_screen_y(U y) U
+    if UU(y) >= WORLD_HEIGHT_PIXELS
+        return U(UU(y) - WORLD_HEIGHT_PIXELS)
+
+    return y
+
 fn katana_overlap(U a, U b) Bool
 
     UU ax = katana_clash_hitbox_x(a)
@@ -555,11 +613,9 @@ fn katana_overlap(U a, U b) Bool
     UU bw = katana_clash_hitbox_w(b)
     UU bh = katana_clash_hitbox_h(b)
 
-    if ax < bx + bw
-        if ax + aw > bx
-            if ay < by + bh
-                if ay + ah > by
-                    return true
+    if x_ranges_overlap_wrapped(ax, aw, bx, bw)
+        if y_ranges_overlap_wrapped(ay, ah, by, bh)
+            return true
 
     return false
 
@@ -581,9 +637,9 @@ fn katana_hitbox_base_x(U p) UU
     if katana_dir[p] == KATANA_RIGHT
         return px + 8
     if katana_dir[p] == KATANA_LEFT
-        if px > 8
+        if px >= 8
             return px - 8
-        return 0
+        return WORLD_WIDTH_PIXELS - (8 - px)
 
     return px
 
@@ -603,9 +659,9 @@ fn katana_clash_hitbox_x(U p) UU
     if katana_dir[p] == KATANA_RIGHT
         return px + 4
     if katana_dir[p] == KATANA_LEFT
-        if px > 8
+        if px >= 8
             return px - 8
-        return 0
+        return WORLD_WIDTH_PIXELS - (8 - px)
     if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
         if want_face[p] == KATANA_LEFT
             return px
@@ -617,9 +673,9 @@ fn katana_hitbox_base_y(U p) UU
     UU py = player_y[p] >> 4
 
     if katana_dir[p] == KATANA_UP
-        if py > 8
+        if py >= 8
             return py - 8
-        return 0
+        return WORLD_HEIGHT_PIXELS - (8 - py)
     if katana_dir[p] == KATANA_DOWN
         return py + 16
 
@@ -637,9 +693,9 @@ fn katana_clash_hitbox_y(U p) UU
     if katana_dir[p] == KATANA_RIGHT || katana_dir[p] == KATANA_LEFT
         return py + 8
     if katana_dir[p] == KATANA_UP
-        if py > 8
+        if py >= 8
             return py - 8
-        return 0
+        return WORLD_HEIGHT_PIXELS - (8 - py)
     if katana_dir[p] == KATANA_DOWN
         return py + 12
 
@@ -734,10 +790,10 @@ fn draw_player(U p, U i) U
         U katana_tile = katana_sprite_table[0]
 
         if katana_dir[p] == KATANA_LEFT
-            if katana_base_x > 8
+            if katana_base_x >= 8
                 katana_x = katana_base_x - 8
             else
-                katana_x = 0
+                katana_x = U(WORLD_WIDTH_PIXELS - (UU(8) - UU(katana_base_x)))
         else if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
             if want_face[p] == KATANA_LEFT
                 if katana_base_x > 6
@@ -751,12 +807,13 @@ fn draw_player(U p, U i) U
                     katana_x = katana_base_x + 6
 
         if katana_dir[p] == KATANA_UP
-            if pcy > 8
+            if pcy >= 4
                 katana_y = pcy - 4
             else
-                katana_y = 0
+                katana_y = U(WORLD_HEIGHT_PIXELS - (UU(4) - UU(pcy)))
         else if katana_dir[p] == KATANA_DOWN
             katana_y = pcy + 16
+        katana_y = wrap_screen_y(katana_y)
 
         if katana_dir[p] == KATANA_LEFT
             katana_attr = 1 + ATTR_H_FLIP
@@ -1010,8 +1067,13 @@ fn apply_position_x_subpixel(U p)
     // --------------------------------------------------
     if force_dir == 0
         player_x[p] += total_force
+        if player_x[p] >= WORLD_WIDTH_SUBPIXELS
+            player_x[p] -= WORLD_WIDTH_SUBPIXELS
     else
-        player_x[p] -= total_force
+        if player_x[p] >= total_force
+            player_x[p] -= total_force
+        else
+            player_x[p] = WORLD_WIDTH_SUBPIXELS - (total_force - player_x[p])
 
     // --------------------------------------------------
     // 7. PIXEL-STEP COLLISION (din befintliga kod)
@@ -1019,27 +1081,53 @@ fn apply_position_x_subpixel(U p)
     UU old_px = old_x[p] >> 4
     UU new_px = player_x[p] >> 4
 
-    if force_dir == 0 && new_px > old_px
-        UU wanted = new_px - old_px
+    if force_dir == 0 && new_px != old_px
+        UU wanted
+        if new_px > old_px
+            wanted = new_px - old_px
+        else
+            wanted = (WORLD_WIDTH_PIXELS - old_px) + new_px
+
         UU allowed = 0
         for UU step = 1; step <= wanted; step += 1
-            if is_wall_at_pixel(p, old_px + step + player_char_width - 1)
+            UU test_x = old_px + step + player_char_width - 1
+            if test_x >= WORLD_WIDTH_PIXELS
+                test_x -= WORLD_WIDTH_PIXELS
+            if is_wall_at_pixel(p, test_x)
                 break
             allowed += 1
         if allowed < wanted
-            player_x[p] = (old_px + allowed) << 4
+            UU allowed_px = old_px + allowed
+            if allowed_px >= WORLD_WIDTH_PIXELS
+                allowed_px -= WORLD_WIDTH_PIXELS
+            player_x[p] = allowed_px << 4
             player_x_vel[p] = 0
             knockback_x_vel[p] = 0
 
-    if force_dir == 64 && old_px > new_px
-        UU wanted = old_px - new_px
+    if force_dir == 64 && new_px != old_px
+        UU wanted
+        if old_px > new_px
+            wanted = old_px - new_px
+        else
+            wanted = old_px + (WORLD_WIDTH_PIXELS - new_px)
+
         UU allowed = 0
         for UU step = 1; step <= wanted; step += 1
-            if is_wall_at_pixel(p, old_px - step)
+            UU test_x
+            if old_px >= step
+                test_x = old_px - step
+            else
+                test_x = WORLD_WIDTH_PIXELS - (step - old_px)
+            if is_wall_at_pixel(p, test_x)
                 break
             allowed += 1
         if allowed < wanted
-            player_x[p] = (old_px - allowed) << 4
+            UU allowed_px
+            if old_px >= allowed
+                allowed_px = old_px - allowed
+            else
+                allowed_px = WORLD_WIDTH_PIXELS - (allowed - old_px)
+            player_x[p] = allowed_px << 4
             player_x_vel[p] = 0
             knockback_x_vel[p] = 0
 
@@ -1159,45 +1247,72 @@ fn apply_position_y_subpixel(U p)
 
     // 5. APPLY VELOCITY
     if y_moving_up[p]
-        player_y[p] -= player_y_vel[p]
+        if player_y[p] >= player_y_vel[p]
+            player_y[p] -= player_y_vel[p]
+        else
+            player_y[p] = WORLD_HEIGHT_SUBPIXELS - (player_y_vel[p] - player_y[p])
     else
         player_y[p] += player_y_vel[p]
+        if player_y[p] >= WORLD_HEIGHT_SUBPIXELS
+            player_y[p] -= WORLD_HEIGHT_SUBPIXELS
 
     // 6. PIXEL DELTA
     UU old_py = old_y[p] >> 4
     UU new_py = player_y[p] >> 4
+    Bool wrapped_y = false
+    if y_moving_up[p] && new_py > old_py
+        wrapped_y = true
+    else if !y_moving_up[p] && new_py < old_py
+        wrapped_y = true
 
     // ---- FALL / GROUND ----
-    if new_py > old_py
-        UU wanted = new_py - old_py
+    if !y_moving_up[p] && new_py != old_py && !wrapped_y
+        UU wanted
+        wanted = new_py - old_py
+
         UU allowed = 0
 
         for UU step = 1; step <= wanted; step += 1
-            if is_ground_at_pixel(p,old_py + step)
+            UU test_y = old_py + step
+            if is_ground_at_pixel(p,test_y)
                 break
             allowed += 1
 
         if allowed < wanted
-            player_y[p] = (old_py + allowed) << 4
+            UU allowed_py = old_py + allowed
+            if allowed_py >= WORLD_HEIGHT_PIXELS
+                allowed_py -= WORLD_HEIGHT_PIXELS
+            player_y[p] = allowed_py << 4
             player_y_vel[p] = 0
             is_player_on_ground[p] = true
             is_wall_sliding[p] = false
             jump_controlled[p] = false
         else
             is_player_on_ground[p] = false
+    else if wrapped_y
+        is_player_on_ground[p] = false
 
     // ---- TAK ----
-    if old_py > new_py
-        UU wanted = old_py - new_py
+    if y_moving_up[p] && new_py != old_py && !wrapped_y
+        UU wanted
+        wanted = old_py - new_py
+
         UU allowed = 0
 
         for UU step = 1; step <= wanted; step += 1
-            if is_ceiling_at_pixel(p,old_py - step)
+            UU test_y
+            test_y = old_py - step
+            if is_ceiling_at_pixel(p,test_y)
                 break
             allowed += 1
 
         if allowed < wanted
-            player_y[p] = (old_py - allowed) << 4
+            UU allowed_py
+            if old_py >= allowed
+                allowed_py = old_py - allowed
+            else
+                allowed_py = WORLD_HEIGHT_PIXELS - (allowed - old_py)
+            player_y[p] = allowed_py << 4
             player_y_vel[p] = 0
             y_moving_up[p] = false
             is_wall_sliding[p] = false
@@ -1209,6 +1324,10 @@ fn ppu_reset_scroll_16(UU x, UU y)
 
 // returns the map metatile at screen pixel position (x, y)
 fn get_mt_at_pix(UU x, UU y) U
+    if x >= WORLD_WIDTH_PIXELS
+        x -= WORLD_WIDTH_PIXELS
+    if y >= WORLD_HEIGHT_PIXELS
+        y -= WORLD_HEIGHT_PIXELS
     UU disp= ((x >> 4) << 4) + (y >> 4)
     U mt=lvl1_mt_map{disp}
     return mt
@@ -1306,10 +1425,8 @@ fn player_katana_hits_another_player(U player, U target) Bool
     UU target_x = player_x[target] >> 4
     UU target_y = player_y[target] >> 4
 
-    if katana_x < target_x + target_w
-        if katana_x + katana_w > target_x
-            if katana_y < target_y + target_h
-                if katana_y + katana_h > target_y
-                    return true
+    if x_ranges_overlap_wrapped(katana_x, katana_w, target_x, target_w)
+        if y_ranges_overlap_wrapped(katana_y, katana_h, target_y, target_h)
+            return true
 
     return false
