@@ -160,9 +160,17 @@ by its height a power of two.
 fn load_screen(CCC/levels my_lvl_pointer)
     U chr_bank = read U(my_lvl_pointer)
     CCC/palettes pal=read CCC/palettes(my_lvl_pointer)
-    CC/metatiles mymetatiles=read CC/metatiles(my_lvl_pointer)
+    CC/metatiles mymetatiles=@mt_metatiles
     UU size = UU(read U(my_lvl_pointer)) // width in metatiles of screen
     //after all these reads, now my_lvl_pointer points to the metatiles matrix
+
+    // Mapper 30 uses CHR-RAM, so CHR must be copied into the PPU at runtime.
+    {PPUMASK}(0)
+    state(M30_CHR(chr_bank))
+    {PPUCTRL}(0)
+    ppu_reset_addr($0000)
+    ppu_upload_pbz.tiles(@chr_chr, 0)
+    state(M30_CHR(chr_bank))
 
     // set palette
     load_palette(pal)
