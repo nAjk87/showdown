@@ -43,7 +43,6 @@ ct UU WORLD_HEIGHT_PIXELS = 240
 ct UU WORLD_HEIGHT_SUBPIXELS = 3840
 ct U HITSTOP_FRAMES = 0
 ct U KILL_FLASH_FRAMES = 10
-ct U KILL_FLASH_COLOR = $30
 ct U RESPAWN_FRAMES = 120
 ct U DEATH_EFFECT_FRAMES = 30
 ct U NUM_DEATH_PARTICLES = 4
@@ -60,16 +59,17 @@ ct U CORPSE_X_SPEED = 28
 ct U CORPSE_Y_SPEED = 42
 ct U CORPSE_GRAVITY = 4
 ct U CORPSE_MAX_FALL_SPEED = 32
+ct U NUM_CORPSES = 12
 ct U[NUM_DEATH_PARTICLES] death_particle_start_x_vel = U[NUM_DEATH_PARTICLES](12,20,12,20)
 ct U[NUM_DEATH_PARTICLES] death_particle_start_y_vel = U[NUM_DEATH_PARTICLES](28,36,36,28)
 ct U[NUM_DEATH_PARTICLES] death_particle_start_dir = U[NUM_DEATH_PARTICLES](64,64,0,0)
-ct U[NUM_PLAYERS] sprite_palette_offset = U[NUM_PLAYERS](12,15,18,21)
 ct U[10] chr_sprt_table = U[10](192, 208, 193, 209, 194, 210, 195, 211, 196, 212)
 ct U WALL_SLIDE_TOP_TILE = 195
 ct U WALL_SLIDE_BOTTOM_TILE = 211
 ct U[3] katana_sprite_table = U[3](224,225,226)
 ct U[3] katana_vertical_sprite_table = U[3](228,229,230)
 ct U[2] sprite_running_anim = U[2](1,2)
+ct U SPRITE_ROW_COUNT = 30
 
 
 
@@ -88,11 +88,6 @@ vars /game_vars
     U[NUM_PLAYERS] katana_dir = U[NUM_PLAYERS](0,0,0,0)
     U[NUM_PLAYERS] death_timer = U[NUM_PLAYERS](0,0,0,0)
     U hitstop_timer = 0
-    Bool palette_dirty = false
-    U[NUM_PLAYERS] kill_flash_timer = U[NUM_PLAYERS](0,0,0,0)
-    U[NUM_PLAYERS] kill_flash_original_0
-    U[NUM_PLAYERS] kill_flash_original_1
-    U[NUM_PLAYERS] kill_flash_original_2
 
     UU[TOTAL_DEATH_PARTICLES] death_particle_x
     UU[TOTAL_DEATH_PARTICLES] death_particle_y
@@ -103,14 +98,18 @@ vars /game_vars
     U[TOTAL_DEATH_PARTICLES] death_particle_timer
     Bool[TOTAL_DEATH_PARTICLES] death_particle_moving_up
 
-    U[NUM_PLAYERS] corpse_state = U[NUM_PLAYERS](0,0,0,0) // 0 hidden, 1 flying, 2 landed
-    UU[NUM_PLAYERS] corpse_x
-    UU[NUM_PLAYERS] corpse_y
-    U[NUM_PLAYERS] corpse_x_vel
-    U[NUM_PLAYERS] corpse_y_vel
-    U[NUM_PLAYERS] corpse_dir
-    U[NUM_PLAYERS] corpse_face
-    Bool[NUM_PLAYERS] corpse_moving_up = Bool[NUM_PLAYERS](false,false,false,false)
+    U next_corpse_slot = 0
+    U[NUM_CORPSES] corpse_state // 0 hidden, 1 flying, 2 landed
+    UU[NUM_CORPSES] corpse_x
+    UU[NUM_CORPSES] corpse_y
+    U[NUM_CORPSES] corpse_x_vel
+    U[NUM_CORPSES] corpse_y_vel
+    U[NUM_CORPSES] corpse_dir
+    U[NUM_CORPSES] corpse_face
+    U[NUM_CORPSES] corpse_palette
+    U[NUM_CORPSES] corpse_flash_timer
+    Bool[NUM_CORPSES] corpse_moving_up
+    U[SPRITE_ROW_COUNT] sprite_row_count
 
     Bool[NUM_PLAYERS] is_player_on_ground = Bool[NUM_PLAYERS](false,false,false,false)
     Bool[NUM_PLAYERS] is_wall_sliding      = Bool[NUM_PLAYERS](false,false,false,false)
@@ -266,10 +265,6 @@ nmi main_nmi()
     // Update OAM and poll the pads:
     ppu_upload_oam_poll_pads(0)
 
-    if palette_dirty
-        ppu_upload_palette()
-        palette_dirty = false
-
     // Turn on rendering:
     {PPUMASK}(PPUMASK_ON | PPUMASK_NO_CLIP)
 
@@ -293,7 +288,6 @@ mode main()
             update_death_timers()
             update_death_effects()
             update_corpses()
-            update_kill_flash()
             for U p=0; p < NUM_PLAYERS; p+=1
                 if death_timer[p] == 0
                     move_player_x(p)
@@ -360,7 +354,6 @@ fn start_player_death(U p, U attacker)
     hitstop_timer = HITSTOP_FRAMES
     spawn_death_particles(p)
     start_player_corpse(p, attacker)
-    start_kill_flash(p)
     katana_time[p] = 120
     player_x_vel[p] = 0
     player_y_vel[p] = 0
@@ -375,66 +368,49 @@ fn start_player_death(U p, U attacker)
     wall_jump_grace_timer[p] = 0
     wall_jump_grace_dir[p] = WALL_NONE
 
+fn allocate_corpse_slot() U
+    U slot = next_corpse_slot
+
+    for U tries = 0; tries < NUM_CORPSES; tries += 1
+        if corpse_state[slot] == 0
+            next_corpse_slot = slot + 1
+            if next_corpse_slot >= NUM_CORPSES
+                next_corpse_slot = 0
+            return slot
+
+        slot += 1
+        if slot >= NUM_CORPSES
+            slot = 0
+
+    slot = next_corpse_slot
+    next_corpse_slot += 1
+    if next_corpse_slot >= NUM_CORPSES
+        next_corpse_slot = 0
+
+    return slot
+
 fn start_player_corpse(U p, U attacker)
-    corpse_state[p] = 1
+    U c = allocate_corpse_slot()
+    corpse_state[c] = 1
 
     if player_x[p] > 64
-        corpse_x[p] = player_x[p] - 64
+        corpse_x[c] = player_x[p] - 64
     else
-        corpse_x[p] = player_x[p]
+        corpse_x[c] = player_x[p]
 
-    corpse_y[p] = player_y[p] + (UU(CORPSE_Y_OFFSET) << 4)
-    corpse_x_vel[p] = CORPSE_X_SPEED
-    corpse_y_vel[p] = CORPSE_Y_SPEED
-    corpse_face[p] = want_face[p]
-    corpse_moving_up[p] = true
+    corpse_y[c] = player_y[p] + (UU(CORPSE_Y_OFFSET) << 4)
+    corpse_x_vel[c] = CORPSE_X_SPEED
+    corpse_y_vel[c] = CORPSE_Y_SPEED
+    corpse_face[c] = want_face[p]
+    corpse_palette[c] = p
+    corpse_flash_timer[c] = KILL_FLASH_FRAMES
+    corpse_moving_up[c] = true
 
     // Throw the body horizontally in the direction of the killing attack.
     if katana_dir[attacker] == KATANA_RIGHT || katana_dir[attacker] == KATANA_LEFT
-        corpse_dir[p] = katana_dir[attacker]
+        corpse_dir[c] = katana_dir[attacker]
     else
-        corpse_dir[p] = want_face[attacker]
-
-fn player_sprite_palette_offset(U p) U
-    return sprite_palette_offset[p]
-
-fn start_kill_flash(U p)
-    U offset = player_sprite_palette_offset(p)
-
-    kill_flash_original_0[p] = palette[offset]
-    kill_flash_original_1[p] = palette[offset + 1]
-    kill_flash_original_2[p] = palette[offset + 2]
-
-    set_kill_flash_palette(p)
-    kill_flash_timer[p] = KILL_FLASH_FRAMES
-
-fn set_kill_flash_palette(U p)
-    U offset = player_sprite_palette_offset(p)
-
-    palette[offset] = KILL_FLASH_COLOR
-    palette[offset + 1] = KILL_FLASH_COLOR
-    palette[offset + 2] = KILL_FLASH_COLOR
-    palette_dirty = true
-
-fn restore_kill_flash_palette(U p)
-    U offset = player_sprite_palette_offset(p)
-
-    palette[offset] = kill_flash_original_0[p]
-    palette[offset + 1] = kill_flash_original_1[p]
-    palette[offset + 2] = kill_flash_original_2[p]
-    palette_dirty = true
-
-fn update_kill_flash()
-    for U p = 0; p < NUM_PLAYERS; p += 1
-        if kill_flash_timer[p] > 0
-            kill_flash_timer[p] -= 1
-
-            if kill_flash_timer[p] == 0
-                restore_kill_flash_palette(p)
-            else if kill_flash_timer[p] & 1
-                set_kill_flash_palette(p)
-            else
-                restore_kill_flash_palette(p)
+        corpse_dir[c] = want_face[attacker]
 
 fn respawn_player(U p)
     player_x[p] = player_initial_x[p] << 4
@@ -465,53 +441,74 @@ fn update_death_timers()
                 respawn_player(p)
 
 fn update_corpses()
-    for U p = 0; p < NUM_PLAYERS; p += 1
-        if corpse_state[p] != 1
+    for U c = 0; c < NUM_CORPSES; c += 1
+        if corpse_state[c] == 0
             continue
 
-        if corpse_dir[p] == 0
-            corpse_x[p] += corpse_x_vel[p]
-        else
-            if corpse_x[p] > corpse_x_vel[p]
-                corpse_x[p] -= corpse_x_vel[p]
+        if corpse_flash_timer[c] > 0
+            corpse_flash_timer[c] -= 1
+
+        if corpse_state[c] != 1
+            continue
+
+        if corpse_x_vel[c] > 0
+            UU new_x = corpse_x[c]
+
+            if corpse_dir[c] == 0
+                new_x += corpse_x_vel[c]
+
+                if new_x + (UU(CORPSE_WIDTH) << 4) > WORLD_WIDTH_SUBPIXELS
+                    corpse_x_vel[c] = 0
+                else if is_corpse_wall_at_pixel((new_x >> 4) + UU(CORPSE_WIDTH) - 1, corpse_y[c] >> 4)
+                    corpse_x_vel[c] = 0
+                else
+                    corpse_x[c] = new_x
             else
-                corpse_x[p] = 0
-                corpse_x_vel[p] = 0
+                if corpse_x[c] > corpse_x_vel[c]
+                    new_x -= corpse_x_vel[c]
 
-        if corpse_x_vel[p] > 0
-            corpse_x_vel[p] -= 1
+                    if is_corpse_wall_at_pixel(new_x >> 4, corpse_y[c] >> 4)
+                        corpse_x_vel[c] = 0
+                    else
+                        corpse_x[c] = new_x
+                else
+                    corpse_x[c] = 0
+                    corpse_x_vel[c] = 0
 
-        if corpse_moving_up[p]
-            if corpse_y_vel[p] > CORPSE_GRAVITY
-                corpse_y_vel[p] -= CORPSE_GRAVITY
-                corpse_y[p] -= corpse_y_vel[p]
+        if corpse_x_vel[c] > 0
+            corpse_x_vel[c] -= 1
+
+        if corpse_moving_up[c]
+            if corpse_y_vel[c] > CORPSE_GRAVITY
+                corpse_y_vel[c] -= CORPSE_GRAVITY
+                corpse_y[c] -= corpse_y_vel[c]
             else
-                corpse_y_vel[p] = 0
-                corpse_moving_up[p] = false
+                corpse_y_vel[c] = 0
+                corpse_moving_up[c] = false
         else
-            corpse_y_vel[p] += CORPSE_GRAVITY
-            if corpse_y_vel[p] > CORPSE_MAX_FALL_SPEED
-                corpse_y_vel[p] = CORPSE_MAX_FALL_SPEED
+            corpse_y_vel[c] += CORPSE_GRAVITY
+            if corpse_y_vel[c] > CORPSE_MAX_FALL_SPEED
+                corpse_y_vel[c] = CORPSE_MAX_FALL_SPEED
 
-            UU old_y = corpse_y[p]
-            corpse_y[p] += corpse_y_vel[p]
+            UU old_y = corpse_y[c]
+            corpse_y[c] += corpse_y_vel[c]
 
             UU old_py = old_y >> 4
-            UU new_py = corpse_y[p] >> 4
+            UU new_py = corpse_y[c] >> 4
 
             if new_py > old_py
                 UU wanted = new_py - old_py
                 UU allowed = 0
 
                 for UU step = 1; step <= wanted; step += 1
-                    if is_corpse_ground_at_pixel(corpse_x[p] >> 4, old_py + step)
+                    if is_corpse_ground_at_pixel(corpse_x[c] >> 4, old_py + step)
                         break
                     allowed += 1
 
                 if allowed < wanted
-                    corpse_y[p] = (old_py + allowed) << 4
-                    corpse_y_vel[p] = 0
-                    corpse_state[p] = 2
+                    corpse_y[c] = (old_py + allowed) << 4
+                    corpse_y_vel[c] = 0
+                    corpse_state[c] = 2
 
 fn spawn_death_particles(U p)
     U first = p << 2
@@ -775,12 +772,14 @@ fn draw_player(U p, U i) U
             else
                 draw_x = 0
 
+    reserve_sprite_row(pcy, 1)
     set_oam_x(i, draw_x)
     set_oam_y(i, pcy)
     set_oam_p(i, sprite_top)
     set_oam_a(i, player_attr)
     i += 4
 
+    reserve_sprite_row(pcy + 8, 1)
     set_oam_x(i, draw_x)
     set_oam_y(i, pcy + 8)
     set_oam_p(i, sprite_bottom)
@@ -849,10 +848,29 @@ fn draw_player(U p, U i) U
             else
                 katana_tile = katana_sprite_table[0]
 
+        reserve_sprite_row(katana_y, 1)
         set_oam(i, katana_x, katana_y, katana_tile, katana_attr)
         i += 4
 
     return i
+
+fn reset_sprite_row_counts()
+    for U row = 0; row < SPRITE_ROW_COUNT; row += 1
+        sprite_row_count[row] = 0
+
+fn sprite_row_from_y(U y) U
+    U row = y >> 3
+    if row >= SPRITE_ROW_COUNT
+        row = SPRITE_ROW_COUNT - 1
+    return row
+
+fn can_fit_sprite_row(U y, U amount) Bool
+    U row = sprite_row_from_y(y)
+    return sprite_row_count[row] + amount <= 8
+
+fn reserve_sprite_row(U y, U amount)
+    U row = sprite_row_from_y(y)
+    sprite_row_count[row] += amount
 
 fn draw_death_effects(U i) U
     // Simulate four particles per death, but draw only one each frame.
@@ -869,42 +887,55 @@ fn draw_death_effects(U i) U
     return i
 
 fn draw_corpses(U i) U
-    for U p = 0; p < NUM_PLAYERS; p += 1
-        if corpse_state[p] == 0
+    for U c = 0; c < NUM_CORPSES; c += 1
+        if corpse_state[c] == 0
             continue
 
-        U pcx = U(corpse_x[p] >> 4)
-        U pcy = U(corpse_y[p] >> 4)
+        U pcx = U(corpse_x[c] >> 4)
+        U pcy = U(corpse_y[c] >> 4)
+        U corpse_attr = corpse_palette[c]
 
-        if corpse_face[p] == 0
+        if corpse_flash_timer[c] & 1
+            continue
+
+        if i > 248 || !can_fit_sprite_row(pcy, 2)
+            corpse_state[c] = 0
+            continue
+
+        reserve_sprite_row(pcy, 2)
+
+        if corpse_face[c] == 0
             set_oam_x(i, pcx)
             set_oam_y(i, pcy)
             set_oam_p(i, CORPSE_LEFT_TILE)
-            set_oam_a(i, p)
+            set_oam_a(i, corpse_attr)
             i += 4
 
             set_oam_x(i, pcx + 8)
             set_oam_y(i, pcy)
             set_oam_p(i, CORPSE_RIGHT_TILE)
-            set_oam_a(i, p)
+            set_oam_a(i, corpse_attr)
             i += 4
         else
+            corpse_attr += ATTR_H_FLIP
+
             set_oam_x(i, pcx)
             set_oam_y(i, pcy)
             set_oam_p(i, CORPSE_RIGHT_TILE)
-            set_oam_a(i, p + 64)
+            set_oam_a(i, corpse_attr)
             i += 4
 
             set_oam_x(i, pcx + 8)
             set_oam_y(i, pcy)
             set_oam_p(i, CORPSE_LEFT_TILE)
-            set_oam_a(i, p + 64)
+            set_oam_a(i, corpse_attr)
             i += 4
 
     return i
 
 fn update_sprites()
     U i = 0
+    reset_sprite_row_counts()
 
     for U p = 0; p < NUM_PLAYERS; p += 1
         if death_timer[p] == 0
@@ -1343,6 +1374,15 @@ fn get_mt_at_pix(UU x, UU y) U
 fn is_wall_at_pixel(U p, UU px) Bool
     UU py_top    = (player_y[p] >> 4) + PLAYER_HEAD_OFFSET + 1
     UU py_bottom = py_top + PLAYER_BODY_HEIGHT - 1
+
+    if get_mt_at_pix(px, py_top) >= pass_through_mt
+        return true
+    if get_mt_at_pix(px, py_bottom) >= pass_through_mt
+        return true
+    return false
+
+fn is_corpse_wall_at_pixel(UU px, UU py_top) Bool
+    UU py_bottom = py_top + UU(CORPSE_HEIGHT) - 1
 
     if get_mt_at_pix(px, py_top) >= pass_through_mt
         return true
