@@ -11,6 +11,11 @@ ct UU PLAYER_BODY_HEIGHT = 12
 
 ct UU[NUM_PLAYERS] player_initial_x = UU[NUM_PLAYERS](40,60,80,100)
 ct UU[NUM_PLAYERS] player_initial_y = UU[NUM_PLAYERS](140,120,120,120)
+ct U NUM_SPAWN_POINTS = 8
+ct U SPAWN_SAFE_X = 32
+ct U SPAWN_SAFE_Y = 24
+ct U[NUM_SPAWN_POINTS] spawn_point_x = U[NUM_SPAWN_POINTS](40, 60, 80, 100, 128, 160, 200, 220)
+ct U[NUM_SPAWN_POINTS] spawn_point_y = U[NUM_SPAWN_POINTS](140, 120, 120, 120, 140, 100, 120, 200)
 
 ct U pass_through_mt = 10
 
@@ -33,7 +38,7 @@ ct U JUMP_START_VEL = 70
 ct U MAX_FALL_SPEED = 50
 ct U WALL_NONE = 255
 ct U WALL_SLIDE_MAX_FALL_SPEED = 14
-ct U WALL_JUMP_X_SPEED = 24
+ct U WALL_JUMP_X_SPEED = 12
 ct U WALL_JUMP_Y_SPEED = 70
 ct U WALL_JUMP_LOCK_FRAMES = 3
 ct U WALL_JUMP_GRACE_FRAMES = 8
@@ -44,6 +49,22 @@ ct UU WORLD_HEIGHT_SUBPIXELS = 3840
 ct U HITSTOP_FRAMES = 0
 ct U KILL_FLASH_FRAMES = 10
 ct U RESPAWN_FRAMES = 120
+ct U STARTING_LIVES = 5
+ct U NO_WINNER = 255
+ct U SPRITE_PALETTE_START = 12
+ct U KILL_FLASH_COLOR = $30
+ct U HUD_LIFE_TILE = 192
+ct U[NUM_PLAYERS] HUD_LIFE_X = U[NUM_PLAYERS](0, 248, 0, 248)
+ct U[NUM_PLAYERS] HUD_LIFE_Y = U[NUM_PLAYERS](8, 8, 208, 208)
+ct U HUD_WIN_TILE_P = 192
+ct U HUD_WIN_TILE_1 = 193
+ct U HUD_WIN_TILE_W = 194
+ct U HUD_WIN_TILE_I = 195
+ct U HUD_WIN_TILE_N = 196
+ct U HUD_WIN_TILE_S = 197
+ct U HUD_WIN_TILE_D = 198
+ct U HUD_WIN_TILE_R = 199
+ct U HUD_WIN_TILE_A = 200
 ct U DEATH_EFFECT_FRAMES = 30
 ct U NUM_DEATH_PARTICLES = 4
 ct U TOTAL_DEATH_PARTICLES = 16
@@ -87,6 +108,16 @@ vars /game_vars
     U[NUM_PLAYERS] katana_time = U[NUM_PLAYERS](120,120,120,120)
     U[NUM_PLAYERS] katana_dir = U[NUM_PLAYERS](0,0,0,0)
     U[NUM_PLAYERS] death_timer = U[NUM_PLAYERS](0,0,0,0)
+    U[NUM_PLAYERS] player_lives = U[NUM_PLAYERS](5,5,5,5)
+    U[NUM_PLAYERS] player_life_flash_timer = U[NUM_PLAYERS](0,0,0,0)
+    Bool[NUM_PLAYERS] player_out = Bool[NUM_PLAYERS](false,false,false,false)
+    Bool game_over = false
+    U winner_player = 255
+    U hud_dirty_mask = 0
+    Bool palette_dirty = false
+    U[25] base_palette
+    U next_spawn_point = 0
+    U spawn_rng_counter = 0
     U hitstop_timer = 0
 
     UU[TOTAL_DEATH_PARTICLES] death_particle_x
@@ -107,7 +138,6 @@ vars /game_vars
     U[NUM_CORPSES] corpse_dir
     U[NUM_CORPSES] corpse_face
     U[NUM_CORPSES] corpse_palette
-    U[NUM_CORPSES] corpse_flash_timer
     Bool[NUM_CORPSES] corpse_moving_up
     U[SPRITE_ROW_COUNT] sprite_row_count
 
@@ -173,6 +203,7 @@ fn load_screen(CCC/levels my_lvl_pointer)
 
     // set palette
     load_palette(pal)
+    store_base_palette()
     ppu_upload_palette()
        
     UU mt_size = UU(read U(mymetatiles)) // number of metatiles
@@ -260,10 +291,45 @@ fn load_screen(CCC/levels my_lvl_pointer)
         ii+=32
         i=ii
 
+fn upload_winner_hud()
+    if !game_over
+        return
+
+    ppu_reset_addr($21CC)
+
+    if winner_player == NO_WINNER
+        {PPUDATA}(HUD_WIN_TILE_D)
+        {PPUDATA}(HUD_WIN_TILE_R)
+        {PPUDATA}(HUD_WIN_TILE_A)
+        {PPUDATA}(HUD_WIN_TILE_W)
+    else
+        {PPUDATA}(HUD_WIN_TILE_P)
+        {PPUDATA}(HUD_WIN_TILE_1 + winner_player)
+        {PPUDATA}(0)
+        {PPUDATA}(HUD_WIN_TILE_W)
+        {PPUDATA}(HUD_WIN_TILE_I)
+        {PPUDATA}(HUD_WIN_TILE_N)
+        {PPUDATA}(HUD_WIN_TILE_S)
+
+fn upload_hud()
+    if hud_dirty_mask == 0
+        return
+
+    if hud_dirty_mask & U(16)
+        upload_winner_hud()
+
+    hud_dirty_mask = 0
+
 
 nmi main_nmi()
     // Update OAM and poll the pads:
     ppu_upload_oam_poll_pads(0)
+
+    if palette_dirty
+        ppu_upload_palette()
+        palette_dirty = false
+
+    upload_hud()
 
     // Turn on rendering:
     {PPUMASK}(PPUMASK_ON | PPUMASK_NO_CLIP)
@@ -276,25 +342,89 @@ mode main()
 : nmi main_nmi
 
     load_screen(@lev_level1) // the name lev_level1 is defined in the levels.macrofab
+    reset_match()
     // Tell the NES to trigger NMI once per frame:
     {PPUCTRL}(PPUCTRL_NMI_ON)
 
     // Wait forever, one frame at a time:
     while true
         update_pads()
-        if hitstop_timer > 0
-            hitstop_timer -= 1
-        else
-            update_death_timers()
-            update_death_effects()
+        spawn_rng_counter += 1
+        update_life_flash_timers()
+        if game_over
             update_corpses()
-            for U p=0; p < NUM_PLAYERS; p+=1
-                if death_timer[p] == 0
-                    move_player_x(p)
-                    move_player_y(p)
-            check_katanas()
+            if any_start_pressed()
+                reset_match()
+        else
+            if hitstop_timer > 0
+                hitstop_timer -= 1
+            else
+                update_death_timers()
+                update_corpses()
+                for U p=0; p < NUM_PLAYERS; p+=1
+                    if death_timer[p] == 0 && !player_out[p]
+                        move_player_x(p)
+                        move_player_y(p)
+                check_katanas()
         update_sprites()
         nmi // Wait for the next NMI
+
+fn any_start_pressed() Bool
+    for U p = 0; p < NUM_PLAYERS; p += 1
+        if pads[p].pressed & BUTTON_START
+            return true
+
+    return false
+
+fn clear_death_effects()
+    for U i = 0; i < TOTAL_DEATH_PARTICLES; i += 1
+        death_particle_timer[i] = 0
+
+fn clear_corpses()
+    for U c = 0; c < NUM_CORPSES; c += 1
+        corpse_state[c] = 0
+
+    next_corpse_slot = 0
+
+fn reset_match()
+    game_over = false
+    winner_player = NO_WINNER
+    hud_dirty_mask = 0
+    hitstop_timer = 0
+
+    clear_death_effects()
+    clear_corpses()
+
+    for U p = 0; p < NUM_PLAYERS; p += 1
+        player_lives[p] = STARTING_LIVES
+        player_life_flash_timer[p] = 0
+        player_out[p] = false
+        death_timer[p] = 0
+        face[p] = 0
+        want_face[p] = 0
+
+    next_spawn_point = 0
+
+    for U p = 0; p < NUM_PLAYERS; p += 1
+        respawn_player(p)
+
+fn check_match_over()
+    U alive_count = 0
+    U last_alive = NO_WINNER
+
+    for U p = 0; p < NUM_PLAYERS; p += 1
+        if !player_out[p]
+            alive_count += 1
+            last_alive = p
+
+    if alive_count == 1
+        game_over = true
+        winner_player = last_alive
+        hud_dirty_mask |= U(16)
+    else if alive_count == 0
+        game_over = true
+        winner_player = NO_WINNER
+        hud_dirty_mask |= U(16)
 
 fn check_katanas()
     U[NUM_PLAYERS] hits = U[NUM_PLAYERS](0)
@@ -303,12 +433,16 @@ fn check_katanas()
 
     // Collect sword-on-sword clashes without changing attack state.
     for U a = 0; a < NUM_PLAYERS; a += 1
+        if player_out[a]
+            continue
         if death_timer[a] > 0
             continue
         if katana_time[a] < katana_kill_min || katana_time[a] > katana_kill_max
             continue
 
         for U b = a + 1; b < NUM_PLAYERS; b += 1
+            if player_out[b]
+                continue
             if death_timer[b] > 0
                 continue
             if katana_time[b] < katana_kill_min || katana_time[b] > katana_kill_max
@@ -320,12 +454,14 @@ fn check_katanas()
 
     // Collect every player hit. A player can hit several targets in one frame.
     for U attacker = 0; attacker < NUM_PLAYERS; attacker += 1
+        if player_out[attacker]
+            continue
         if death_timer[attacker] > 0
             continue
         if katana_time[attacker] >= katana_kill_min && katana_time[attacker] <= katana_kill_max
             for U target = 0; target < NUM_PLAYERS; target += 1
                 if attacker != target
-                    if death_timer[target] == 0
+                    if death_timer[target] == 0 && !player_out[target]
                         if player_katana_hits_another_player(attacker, target)
                             hits[attacker] |= U(1) << target
 
@@ -349,11 +485,24 @@ fn check_katanas()
 
             start_player_death(victim, killer)
 
+    check_match_over()
+
 fn start_player_death(U p, U attacker)
-    death_timer[p] = RESPAWN_FRAMES
     hitstop_timer = HITSTOP_FRAMES
-    spawn_death_particles(p)
     start_player_corpse(p, attacker)
+
+    if player_lives[p] > 0
+        player_lives[p] -= 1
+
+    player_life_flash_timer[p] = KILL_FLASH_FRAMES
+    hud_dirty_mask |= U(1) << p
+
+    if player_lives[p] == 0
+        death_timer[p] = 0
+        player_out[p] = true
+    else
+        death_timer[p] = RESPAWN_FRAMES
+
     katana_time[p] = 120
     player_x_vel[p] = 0
     player_y_vel[p] = 0
@@ -403,7 +552,6 @@ fn start_player_corpse(U p, U attacker)
     corpse_y_vel[c] = CORPSE_Y_SPEED
     corpse_face[c] = want_face[p]
     corpse_palette[c] = p
-    corpse_flash_timer[c] = KILL_FLASH_FRAMES
     corpse_moving_up[c] = true
 
     // Throw the body horizontally in the direction of the killing attack.
@@ -412,9 +560,90 @@ fn start_player_corpse(U p, U attacker)
     else
         corpse_dir[c] = want_face[attacker]
 
+fn abs_u(U a, U b) U
+    if a > b
+        return a - b
+
+    return b - a
+
+fn wrapped_x_distance(U a, U b) U
+    U dist = abs_u(a, b)
+    if dist > 128
+        dist = 0 - dist
+
+    return dist
+
+fn wrapped_y_distance(U a, U b) U
+    U dist = abs_u(a, b)
+    if dist > 120
+        dist = 240 - dist
+
+    return dist
+
+fn spawn_point_is_clear(U spawn) Bool
+    UU px_left = UU(spawn_point_x[spawn])
+    UU px_right = px_left + player_char_width - 1
+    UU py_top = UU(spawn_point_y[spawn]) + PLAYER_HEAD_OFFSET + 1
+    UU py_bottom = py_top + PLAYER_BODY_HEIGHT - 1
+    UU py_ground = UU(spawn_point_y[spawn]) + player_char_height
+
+    if get_mt_at_pix(px_left, py_top) >= pass_through_mt
+        return false
+    if get_mt_at_pix(px_right, py_top) >= pass_through_mt
+        return false
+    if get_mt_at_pix(px_left, py_bottom) >= pass_through_mt
+        return false
+    if get_mt_at_pix(px_right, py_bottom) >= pass_through_mt
+        return false
+
+    if get_mt_at_pix(px_left, py_ground) >= pass_through_mt
+        return true
+    if get_mt_at_pix(px_right, py_ground) >= pass_through_mt
+        return true
+
+    return false
+
+fn spawn_point_near_player(U spawn, U p) Bool
+    for U other = 0; other < NUM_PLAYERS; other += 1
+        if other == p
+            continue
+        if player_out[other]
+            continue
+        if death_timer[other] > 0
+            continue
+
+        U dx = wrapped_x_distance(spawn_point_x[spawn], U(player_x[other] >> 4))
+        U dy = wrapped_y_distance(spawn_point_y[spawn], U(player_y[other] >> 4))
+
+        if dx < SPAWN_SAFE_X && dy < SPAWN_SAFE_Y
+            return true
+
+    return false
+
+fn choose_spawn_point(U p) U
+    U spawn = spawn_rng_counter + next_spawn_point + p
+
+    while spawn >= NUM_SPAWN_POINTS
+        spawn -= NUM_SPAWN_POINTS
+
+    for U tries = 0; tries < NUM_SPAWN_POINTS; tries += 1
+        if spawn_point_is_clear(spawn)
+            if !spawn_point_near_player(spawn, p)
+                next_spawn_point = spawn + 1
+                if next_spawn_point >= NUM_SPAWN_POINTS
+                    next_spawn_point = 0
+                return spawn
+
+        spawn += 1
+        if spawn >= NUM_SPAWN_POINTS
+            spawn = 0
+
+    return p
+
 fn respawn_player(U p)
-    player_x[p] = player_initial_x[p] << 4
-    player_y[p] = player_initial_y[p] << 4
+    U spawn = choose_spawn_point(p)
+    player_x[p] = UU(spawn_point_x[spawn]) << 4
+    player_y[p] = UU(spawn_point_y[spawn]) << 4
     player_x_vel[p] = 0
     player_y_vel[p] = 0
     knockback_x_vel[p] = 0
@@ -435,18 +664,62 @@ fn respawn_player(U p)
 
 fn update_death_timers()
     for U p = 0; p < NUM_PLAYERS; p += 1
-        if death_timer[p] > 0
+        if death_timer[p] > 0 && !player_out[p]
             death_timer[p] -= 1
             if death_timer[p] == 0
                 respawn_player(p)
+
+fn sprite_palette_index(U p) U
+    return SPRITE_PALETTE_START + (p << 1) + p
+
+fn store_base_palette()
+    for U i = 0; i < len(palette); i += 1
+    : -unroll
+        base_palette[i] = palette[i]
+
+fn restore_player_palette(U p)
+    U base = sprite_palette_index(p)
+    palette[base] = base_palette[base]
+    palette[base + 1] = base_palette[base + 1]
+    palette[base + 2] = base_palette[base + 2]
+
+fn flash_player_palette(U p)
+    U base = sprite_palette_index(p)
+    palette[base] = KILL_FLASH_COLOR
+    palette[base + 1] = KILL_FLASH_COLOR
+    palette[base + 2] = KILL_FLASH_COLOR
+
+fn update_kill_flash_palette()
+    Bool should_upload = false
+
+    for U p = 0; p < NUM_PLAYERS; p += 1
+        restore_player_palette(p)
+
+        if player_life_flash_timer[p] > 0
+            should_upload = true
+            if player_life_flash_timer[p] & 1
+                flash_player_palette(p)
+
+    if should_upload
+        palette_dirty = true
+
+fn update_life_flash_timers()
+    Bool had_flash = false
+
+    for U p = 0; p < NUM_PLAYERS; p += 1
+        if player_life_flash_timer[p] > 0
+            had_flash = true
+            player_life_flash_timer[p] -= 1
+
+    update_kill_flash_palette()
+
+    if had_flash
+        palette_dirty = true
 
 fn update_corpses()
     for U c = 0; c < NUM_CORPSES; c += 1
         if corpse_state[c] == 0
             continue
-
-        if corpse_flash_timer[c] > 0
-            corpse_flash_timer[c] -= 1
 
         if corpse_state[c] != 1
             continue
@@ -872,11 +1145,52 @@ fn reserve_sprite_row(U y, U amount)
     U row = sprite_row_from_y(y)
     sprite_row_count[row] += amount
 
+fn hud_life_sprite_x(U p, U slot) U
+    U x = HUD_LIFE_X[p]
+
+    if p == 1 || p == 3
+        if slot == 1 || slot == 3
+            x -= 8
+    else
+        if slot == 1 || slot == 3
+            x += 8
+
+    return x
+
+fn hud_life_sprite_y(U p, U slot) U
+    U y = HUD_LIFE_Y[p]
+
+    if slot == 2 || slot == 3
+        y += 8
+    else if slot == 4
+        y += 16
+
+    return y
+
+fn draw_life_hud(U i) U
+    for U p = 0; p < NUM_PLAYERS; p += 1
+        for U life = 0; life < player_lives[p]; life += 1
+            U x = hud_life_sprite_x(p, life)
+            U y = hud_life_sprite_y(p, life)
+
+            if i > 252 || !can_fit_sprite_row(y, 1)
+                continue
+
+            reserve_sprite_row(y, 1)
+            set_oam_x(i, x)
+            set_oam_y(i, y)
+            set_oam_p(i, HUD_LIFE_TILE)
+            set_oam_a(i, p)
+            i += 4
+
+    return i
+
 fn draw_death_effects(U i) U
     // Simulate four particles per death, but draw only one each frame.
     for U p = 0; p < NUM_PLAYERS; p += 1
-        if death_timer[p] > 0
-            U particle = (p << 2) + (death_timer[p] & U(3))
+        U first = p << 2
+        if death_particle_timer[first] > 0
+            U particle = first + (death_particle_timer[first] & U(3))
             if death_particle_timer[particle] > 0
                 set_oam_x(i, U(death_particle_x[particle] >> 4))
                 set_oam_y(i, U(death_particle_y[particle] >> 4))
@@ -894,9 +1208,6 @@ fn draw_corpses(U i) U
         U pcx = U(corpse_x[c] >> 4)
         U pcy = U(corpse_y[c] >> 4)
         U corpse_attr = corpse_palette[c]
-
-        if corpse_flash_timer[c] & 1
-            continue
 
         if i > 248 || !can_fit_sprite_row(pcy, 2)
             corpse_state[c] = 0
@@ -938,11 +1249,11 @@ fn update_sprites()
     reset_sprite_row_counts()
 
     for U p = 0; p < NUM_PLAYERS; p += 1
-        if death_timer[p] == 0
+        if death_timer[p] == 0 && !player_out[p]
             i = draw_player(p, i)
 
+    i = draw_life_hud(i)
     i = draw_corpses(i)
-    i = draw_death_effects(i)
 
     // Clear the remainder of OAM
     hide_oam(i)
