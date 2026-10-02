@@ -17,7 +17,17 @@ ct U SPAWN_SAFE_Y = 24
 ct U[NUM_SPAWN_POINTS] spawn_point_x = U[NUM_SPAWN_POINTS](40, 60, 80, 100, 128, 160, 200, 220)
 ct U[NUM_SPAWN_POINTS] spawn_point_y = U[NUM_SPAWN_POINTS](140, 120, 120, 120, 140, 100, 120, 200)
 
-ct U pass_through_mt = 10
+// Only these metatiles collide. Decorative metatiles can use any other index.
+ct U SOLID_METATILE_COUNT = 49
+ct Bool[SOLID_METATILE_COUNT] solid_metatile_table = Bool[SOLID_METATILE_COUNT](
+    false, true, true, false, false, false, false, false,
+    false, false, true, true, true, true, false, false,
+    true, true, true, false, false, false, false, false,
+    true, true, true, true, true, false, true, true,
+    true, true, true, false, false, false, false, false,
+    false, false, true, true, true, false, false, false,
+    true
+)
 
 ct U katana_kill_min = 123
 ct U katana_kill_max = 127
@@ -53,26 +63,60 @@ ct U STARTING_LIVES = 5
 ct U NO_WINNER = 255
 ct U SPRITE_PALETTE_START = 12
 ct U KILL_FLASH_COLOR = $30
-ct U HUD_LIFE_TILE = 192
+
+// ---------------------------------------------------------------------------
+// Sprite/tile indices
+// ---------------------------------------------------------------------------
+// Player body sprites are two 8x8 sprites: head/top + legs/bottom.
+ct U PLAYER_IDLE_HEAD_TILE = 192
+ct U PLAYER_IDLE_LEGS_TILE = 208
+ct U PLAYER_RUN_1_HEAD_TILE = 193
+ct U PLAYER_RUN_1_LEGS_TILE = 209
+ct U PLAYER_RUN_2_HEAD_TILE = 194
+ct U PLAYER_RUN_2_LEGS_TILE = 210
+ct U PLAYER_WALL_SLIDE_HEAD_TILE = 195
+ct U PLAYER_WALL_SLIDE_LEGS_TILE = 211
+ct U PLAYER_EXTRA_HEAD_TILE = 196
+ct U PLAYER_EXTRA_LEGS_TILE = 212
+ct U PLAYER_IDLE_NO_KATANA_HEAD_TILE = 197
+ct U PLAYER_IDLE_NO_KATANA_LEGS_TILE = 213
+ct U PLAYER_RUN_1_NO_KATANA_HEAD_TILE = 198
+ct U PLAYER_RUN_1_NO_KATANA_LEGS_TILE = 214
+ct U PLAYER_RUN_2_NO_KATANA_HEAD_TILE = 199
+ct U PLAYER_RUN_2_NO_KATANA_LEGS_TILE = 215
+ct U PLAYER_WALL_SLIDE_NO_KATANA_HEAD_TILE = 200
+ct U PLAYER_WALL_SLIDE_NO_KATANA_LEGS_TILE = 216
+ct U PLAYER_EXTRA_NO_KATANA_HEAD_TILE = 201
+ct U PLAYER_EXTRA_NO_KATANA_LEGS_TILE = 217
+
+ct U CORPSE_LEFT_TILE = 218
+ct U CORPSE_RIGHT_TILE = 219
+
+ct U KATANA_HORIZONTAL_START_TILE = 224
+ct U KATANA_HORIZONTAL_ACTIVE_TILE = 225
+ct U KATANA_HORIZONTAL_END_TILE = 226
+ct U DEATH_PARTICLE_TILE = 227
+ct U KATANA_VERTICAL_START_TILE = 228
+ct U KATANA_VERTICAL_ACTIVE_TILE = 229
+ct U KATANA_VERTICAL_END_TILE = 230
+
+ct U HUD_LIFE_HEAD_TILE = PLAYER_IDLE_HEAD_TILE
 ct U[NUM_PLAYERS] HUD_LIFE_X = U[NUM_PLAYERS](0, 248, 0, 248)
 ct U[NUM_PLAYERS] HUD_LIFE_Y = U[NUM_PLAYERS](8, 8, 208, 208)
-ct U HUD_WIN_TILE_P = 192
-ct U HUD_WIN_TILE_1 = 193
-ct U HUD_WIN_TILE_W = 194
-ct U HUD_WIN_TILE_I = 195
-ct U HUD_WIN_TILE_N = 196
-ct U HUD_WIN_TILE_S = 197
-ct U HUD_WIN_TILE_D = 198
-ct U HUD_WIN_TILE_R = 199
-ct U HUD_WIN_TILE_A = 200
+ct U HUD_WIN_TILE_P = PLAYER_IDLE_HEAD_TILE
+ct U HUD_WIN_TILE_1 = PLAYER_RUN_1_HEAD_TILE
+ct U HUD_WIN_TILE_W = PLAYER_RUN_2_HEAD_TILE
+ct U HUD_WIN_TILE_I = PLAYER_WALL_SLIDE_HEAD_TILE
+ct U HUD_WIN_TILE_N = PLAYER_EXTRA_HEAD_TILE
+ct U HUD_WIN_TILE_S = PLAYER_IDLE_NO_KATANA_HEAD_TILE
+ct U HUD_WIN_TILE_D = PLAYER_RUN_1_NO_KATANA_HEAD_TILE
+ct U HUD_WIN_TILE_R = PLAYER_RUN_2_NO_KATANA_HEAD_TILE
+ct U HUD_WIN_TILE_A = PLAYER_WALL_SLIDE_NO_KATANA_HEAD_TILE
 ct U DEATH_EFFECT_FRAMES = 30
 ct U NUM_DEATH_PARTICLES = 4
 ct U TOTAL_DEATH_PARTICLES = 16
-ct U DEATH_PARTICLE_TILE = 227
 ct U DEATH_PARTICLE_GRAVITY = 2
 ct U DEATH_PARTICLE_MAX_FALL_SPEED = 32
-ct U CORPSE_LEFT_TILE = 218
-ct U CORPSE_RIGHT_TILE = 219
 ct U CORPSE_Y_OFFSET = 4
 ct U CORPSE_WIDTH = 16
 ct U CORPSE_HEIGHT = 4
@@ -84,11 +128,30 @@ ct U NUM_CORPSES = 12
 ct U[NUM_DEATH_PARTICLES] death_particle_start_x_vel = U[NUM_DEATH_PARTICLES](12,20,12,20)
 ct U[NUM_DEATH_PARTICLES] death_particle_start_y_vel = U[NUM_DEATH_PARTICLES](28,36,36,28)
 ct U[NUM_DEATH_PARTICLES] death_particle_start_dir = U[NUM_DEATH_PARTICLES](64,64,0,0)
-ct U[10] chr_sprt_table = U[10](192, 208, 193, 209, 194, 210, 195, 211, 196, 212)
-ct U WALL_SLIDE_TOP_TILE = 195
-ct U WALL_SLIDE_BOTTOM_TILE = 211
-ct U[3] katana_sprite_table = U[3](224,225,226)
-ct U[3] katana_vertical_sprite_table = U[3](228,229,230)
+ct U[10] player_body_sprite_tiles = U[10](
+    PLAYER_IDLE_HEAD_TILE, PLAYER_IDLE_LEGS_TILE,
+    PLAYER_RUN_1_HEAD_TILE, PLAYER_RUN_1_LEGS_TILE,
+    PLAYER_RUN_2_HEAD_TILE, PLAYER_RUN_2_LEGS_TILE,
+    PLAYER_WALL_SLIDE_HEAD_TILE, PLAYER_WALL_SLIDE_LEGS_TILE,
+    PLAYER_EXTRA_HEAD_TILE, PLAYER_EXTRA_LEGS_TILE
+)
+ct U[10] player_body_no_katana_sprite_tiles = U[10](
+    PLAYER_IDLE_NO_KATANA_HEAD_TILE, PLAYER_IDLE_NO_KATANA_LEGS_TILE,
+    PLAYER_RUN_1_NO_KATANA_HEAD_TILE, PLAYER_RUN_1_NO_KATANA_LEGS_TILE,
+    PLAYER_RUN_2_NO_KATANA_HEAD_TILE, PLAYER_RUN_2_NO_KATANA_LEGS_TILE,
+    PLAYER_WALL_SLIDE_NO_KATANA_HEAD_TILE, PLAYER_WALL_SLIDE_NO_KATANA_LEGS_TILE,
+    PLAYER_EXTRA_NO_KATANA_HEAD_TILE, PLAYER_EXTRA_NO_KATANA_LEGS_TILE
+)
+ct U[3] katana_horizontal_sprite_tiles = U[3](
+    KATANA_HORIZONTAL_START_TILE,
+    KATANA_HORIZONTAL_ACTIVE_TILE,
+    KATANA_HORIZONTAL_END_TILE
+)
+ct U[3] katana_vertical_sprite_tiles = U[3](
+    KATANA_VERTICAL_START_TILE,
+    KATANA_VERTICAL_ACTIVE_TILE,
+    KATANA_VERTICAL_END_TILE
+)
 ct U[2] sprite_running_anim = U[2](1,2)
 ct U SPRITE_ROW_COUNT = 30
 
@@ -587,18 +650,18 @@ fn spawn_point_is_clear(U spawn) Bool
     UU py_bottom = py_top + PLAYER_BODY_HEIGHT - 1
     UU py_ground = UU(spawn_point_y[spawn]) + player_char_height
 
-    if get_mt_at_pix(px_left, py_top) >= pass_through_mt
+    if is_solid_metatile(get_mt_at_pix(px_left, py_top))
         return false
-    if get_mt_at_pix(px_right, py_top) >= pass_through_mt
+    if is_solid_metatile(get_mt_at_pix(px_right, py_top))
         return false
-    if get_mt_at_pix(px_left, py_bottom) >= pass_through_mt
+    if is_solid_metatile(get_mt_at_pix(px_left, py_bottom))
         return false
-    if get_mt_at_pix(px_right, py_bottom) >= pass_through_mt
+    if is_solid_metatile(get_mt_at_pix(px_right, py_bottom))
         return false
 
-    if get_mt_at_pix(px_left, py_ground) >= pass_through_mt
+    if is_solid_metatile(get_mt_at_pix(px_left, py_ground))
         return true
-    if get_mt_at_pix(px_right, py_ground) >= pass_through_mt
+    if is_solid_metatile(get_mt_at_pix(px_right, py_ground))
         return true
 
     return false
@@ -1023,17 +1086,21 @@ fn draw_player(U p, U i) U
     U pcx = U(player_x[p] >> 4)
     U pcy = U(player_y[p] >> 4)
     U draw_x = pcx
-    U sprite_top = chr_sprt_table[player_sprite[p] << 1]
-    U sprite_bottom = chr_sprt_table[(player_sprite[p] << 1) + 1]
+    U sprite_top = player_body_sprite_tiles[player_sprite[p] << 1]
+    U sprite_bottom = player_body_sprite_tiles[(player_sprite[p] << 1) + 1]
     U player_attr = p + want_face[p]
 
     if katana_time[p] != 120
-        sprite_top += 5
-        sprite_bottom += 5
+        sprite_top = player_body_no_katana_sprite_tiles[player_sprite[p] << 1]
+        sprite_bottom = player_body_no_katana_sprite_tiles[(player_sprite[p] << 1) + 1]
 
     if is_wall_sliding[p] && !is_player_on_ground[p]
-        sprite_top = WALL_SLIDE_TOP_TILE
-        sprite_bottom = WALL_SLIDE_BOTTOM_TILE
+        if katana_time[p] != 120
+            sprite_top = PLAYER_WALL_SLIDE_NO_KATANA_HEAD_TILE
+            sprite_bottom = PLAYER_WALL_SLIDE_NO_KATANA_LEGS_TILE
+        else
+            sprite_top = PLAYER_WALL_SLIDE_HEAD_TILE
+            sprite_bottom = PLAYER_WALL_SLIDE_LEGS_TILE
 
         if face[p] == KATANA_LEFT
             player_attr = p + ATTR_H_FLIP
@@ -1067,7 +1134,7 @@ fn draw_player(U p, U i) U
         U katana_x = katana_base_x + 8
         U katana_y = pcy + 9
         U katana_attr = 1
-        U katana_tile = katana_sprite_table[0]
+        U katana_tile = katana_horizontal_sprite_tiles[0]
 
         if katana_dir[p] == KATANA_LEFT
             if katana_base_x >= 8
@@ -1107,19 +1174,19 @@ fn draw_player(U p, U i) U
 
         if katana_time[p] >= 128
             if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
-                katana_tile = katana_vertical_sprite_table[2]
+                katana_tile = katana_vertical_sprite_tiles[2]
             else
-                katana_tile = katana_sprite_table[2]
+                katana_tile = katana_horizontal_sprite_tiles[2]
         else if katana_time[p] >= 123
             if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
-                katana_tile = katana_vertical_sprite_table[1]
+                katana_tile = katana_vertical_sprite_tiles[1]
             else
-                katana_tile = katana_sprite_table[1]
+                katana_tile = katana_horizontal_sprite_tiles[1]
         else
             if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
-                katana_tile = katana_vertical_sprite_table[0]
+                katana_tile = katana_vertical_sprite_tiles[0]
             else
-                katana_tile = katana_sprite_table[0]
+                katana_tile = katana_horizontal_sprite_tiles[0]
 
         reserve_sprite_row(katana_y, 1)
         set_oam(i, katana_x, katana_y, katana_tile, katana_attr)
@@ -1179,7 +1246,7 @@ fn draw_life_hud(U i) U
             reserve_sprite_row(y, 1)
             set_oam_x(i, x)
             set_oam_y(i, y)
-            set_oam_p(i, HUD_LIFE_TILE)
+            set_oam_p(i, HUD_LIFE_HEAD_TILE)
             set_oam_a(i, p)
             i += 4
 
@@ -1682,22 +1749,28 @@ fn get_mt_at_pix(UU x, UU y) U
     U mt=lvl1_mt_map{disp}
     return mt
 
+fn is_solid_metatile(U mt) Bool
+    if mt < SOLID_METATILE_COUNT
+        return solid_metatile_table[mt]
+
+    return false
+
 fn is_wall_at_pixel(U p, UU px) Bool
     UU py_top    = (player_y[p] >> 4) + PLAYER_HEAD_OFFSET + 1
     UU py_bottom = py_top + PLAYER_BODY_HEIGHT - 1
 
-    if get_mt_at_pix(px, py_top) >= pass_through_mt
+    if is_solid_metatile(get_mt_at_pix(px, py_top))
         return true
-    if get_mt_at_pix(px, py_bottom) >= pass_through_mt
+    if is_solid_metatile(get_mt_at_pix(px, py_bottom))
         return true
     return false
 
 fn is_corpse_wall_at_pixel(UU px, UU py_top) Bool
     UU py_bottom = py_top + UU(CORPSE_HEIGHT) - 1
 
-    if get_mt_at_pix(px, py_top) >= pass_through_mt
+    if is_solid_metatile(get_mt_at_pix(px, py_top))
         return true
-    if get_mt_at_pix(px, py_bottom) >= pass_through_mt
+    if is_solid_metatile(get_mt_at_pix(px, py_bottom))
         return true
     return false
 
@@ -1718,7 +1791,7 @@ fn wall_contact_dir(U p) U
 fn is_wall_slide_at_pixel(U p, UU px) Bool
     UU py = (player_y[p] >> 4) + PLAYER_HEAD_OFFSET + PLAYER_BODY_HEIGHT - 1
 
-    if get_mt_at_pix(px, py) >= pass_through_mt
+    if is_solid_metatile(get_mt_at_pix(px, py))
         return true
     return false
 
@@ -1742,9 +1815,9 @@ fn is_ground_at_pixel(U p, UU py) Bool
 
     UU test_y = py + PLAYER_BODY_HEIGHT + PLAYER_HEAD_OFFSET
 
-    if get_mt_at_pix(px_left, test_y) >= pass_through_mt
+    if is_solid_metatile(get_mt_at_pix(px_left, test_y))
         return true
-    if get_mt_at_pix(px_right, test_y) >= pass_through_mt
+    if is_solid_metatile(get_mt_at_pix(px_right, test_y))
         return true
     return false
 
@@ -1752,9 +1825,9 @@ fn is_corpse_ground_at_pixel(UU px_left, UU py) Bool
     UU px_right = px_left + UU(CORPSE_WIDTH) - 1
     UU test_y = py + UU(CORPSE_HEIGHT)
 
-    if get_mt_at_pix(px_left, test_y) >= pass_through_mt
+    if is_solid_metatile(get_mt_at_pix(px_left, test_y))
         return true
-    if get_mt_at_pix(px_right, test_y) >= pass_through_mt
+    if is_solid_metatile(get_mt_at_pix(px_right, test_y))
         return true
     return false
 
@@ -1764,9 +1837,9 @@ fn is_ceiling_at_pixel(U p, UU py) Bool
     UU px_left  = player_x[p] >> 4
     UU px_right = px_left + player_char_width - 1
 
-    if get_mt_at_pix(px_left, head_y) >= pass_through_mt
+    if is_solid_metatile(get_mt_at_pix(px_left, head_y))
         return true
-    if get_mt_at_pix(px_right, head_y) >= pass_through_mt
+    if is_solid_metatile(get_mt_at_pix(px_right, head_y))
         return true
     return false
 
