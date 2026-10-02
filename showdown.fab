@@ -5,9 +5,9 @@ mapfab(raw, "yee2.mapfab", "chr", "palette", "metatiles", "level")
 ct U NUM_PLAYERS = 4
 
 ct UU player_char_width = 8
-ct UU player_char_height = 16
-ct UU PLAYER_HEAD_OFFSET = 4
-ct UU PLAYER_BODY_HEIGHT = 12
+ct UU player_char_height = 8
+ct UU PLAYER_HEAD_OFFSET = 0
+ct UU PLAYER_BODY_HEIGHT = 8
 
 ct UU[NUM_PLAYERS] player_initial_x = UU[NUM_PLAYERS](40,60,80,100)
 ct UU[NUM_PLAYERS] player_initial_y = UU[NUM_PLAYERS](140,120,120,120)
@@ -68,21 +68,21 @@ ct U KILL_FLASH_COLOR = $30
 // Sprite/tile indices
 // ---------------------------------------------------------------------------
 // Player body sprites are two 8x8 sprites: head/top + legs/bottom.
-ct U PLAYER_IDLE_HEAD_TILE = 192
+ct U PLAYER_IDLE_HEAD_TILE = 96
 ct U PLAYER_IDLE_LEGS_TILE = 208
-ct U PLAYER_RUN_1_HEAD_TILE = 193
+ct U PLAYER_RUN_1_HEAD_TILE = 97
 ct U PLAYER_RUN_1_LEGS_TILE = 209
-ct U PLAYER_RUN_2_HEAD_TILE = 194
+ct U PLAYER_RUN_2_HEAD_TILE = 98
 ct U PLAYER_RUN_2_LEGS_TILE = 210
 ct U PLAYER_WALL_SLIDE_HEAD_TILE = 195
 ct U PLAYER_WALL_SLIDE_LEGS_TILE = 211
 ct U PLAYER_EXTRA_HEAD_TILE = 196
 ct U PLAYER_EXTRA_LEGS_TILE = 212
-ct U PLAYER_IDLE_NO_KATANA_HEAD_TILE = 197
+ct U PLAYER_IDLE_NO_KATANA_HEAD_TILE = PLAYER_IDLE_HEAD_TILE
 ct U PLAYER_IDLE_NO_KATANA_LEGS_TILE = 213
-ct U PLAYER_RUN_1_NO_KATANA_HEAD_TILE = 198
+ct U PLAYER_RUN_1_NO_KATANA_HEAD_TILE = PLAYER_RUN_1_HEAD_TILE
 ct U PLAYER_RUN_1_NO_KATANA_LEGS_TILE = 214
-ct U PLAYER_RUN_2_NO_KATANA_HEAD_TILE = 199
+ct U PLAYER_RUN_2_NO_KATANA_HEAD_TILE = PLAYER_RUN_2_HEAD_TILE
 ct U PLAYER_RUN_2_NO_KATANA_LEGS_TILE = 215
 ct U PLAYER_WALL_SLIDE_NO_KATANA_HEAD_TILE = 200
 ct U PLAYER_WALL_SLIDE_NO_KATANA_LEGS_TILE = 216
@@ -1018,13 +1018,13 @@ fn katana_hitbox_base_y(U p) UU
             return py - 8
         return WORLD_HEIGHT_PIXELS - (8 - py)
     if katana_dir[p] == KATANA_DOWN
-        return py + 16
+        return py + 8
 
     return py + 4
 
 fn katana_player_hitbox_y(U p) UU
     if katana_dir[p] == KATANA_RIGHT || katana_dir[p] == KATANA_LEFT
-        return (player_y[p] >> 4) + 7
+        return (player_y[p] >> 4) + 3
 
     return katana_hitbox_base_y(p)
 
@@ -1032,13 +1032,13 @@ fn katana_clash_hitbox_y(U p) UU
     UU py = player_y[p] >> 4
 
     if katana_dir[p] == KATANA_RIGHT || katana_dir[p] == KATANA_LEFT
-        return py + 8
+        return py + 4
     if katana_dir[p] == KATANA_UP
         if py >= 8
             return py - 8
         return WORLD_HEIGHT_PIXELS - (8 - py)
     if katana_dir[p] == KATANA_DOWN
-        return py + 12
+        return py + 8
 
     return katana_hitbox_base_y(p)
 
@@ -1087,20 +1087,16 @@ fn draw_player(U p, U i) U
     U pcy = U(player_y[p] >> 4)
     U draw_x = pcx
     U sprite_top = player_body_sprite_tiles[player_sprite[p] << 1]
-    U sprite_bottom = player_body_sprite_tiles[(player_sprite[p] << 1) + 1]
     U player_attr = p + want_face[p]
 
     if katana_time[p] != 120
         sprite_top = player_body_no_katana_sprite_tiles[player_sprite[p] << 1]
-        sprite_bottom = player_body_no_katana_sprite_tiles[(player_sprite[p] << 1) + 1]
 
     if is_wall_sliding[p] && !is_player_on_ground[p]
         if katana_time[p] != 120
             sprite_top = PLAYER_WALL_SLIDE_NO_KATANA_HEAD_TILE
-            sprite_bottom = PLAYER_WALL_SLIDE_NO_KATANA_LEGS_TILE
         else
             sprite_top = PLAYER_WALL_SLIDE_HEAD_TILE
-            sprite_bottom = PLAYER_WALL_SLIDE_LEGS_TILE
 
         if face[p] == KATANA_LEFT
             player_attr = p + ATTR_H_FLIP
@@ -1119,20 +1115,13 @@ fn draw_player(U p, U i) U
     set_oam_a(i, player_attr)
     i += 4
 
-    reserve_sprite_row(pcy + 8, 1)
-    set_oam_x(i, draw_x)
-    set_oam_y(i, pcy + 8)
-    set_oam_p(i, sprite_bottom)
-    set_oam_a(i, player_attr)
-    i += 4
-
     if katana_time[p] > 120
         U katana_base_x = pcx
         if is_wall_sliding[p] && !is_player_on_ground[p]
             katana_base_x = draw_x
 
         U katana_x = katana_base_x + 8
-        U katana_y = pcy + 9
+        U katana_y = pcy + 4
         U katana_attr = 1
         U katana_tile = katana_horizontal_sprite_tiles[0]
 
@@ -1159,7 +1148,7 @@ fn draw_player(U p, U i) U
             else
                 katana_y = U(WORLD_HEIGHT_PIXELS - (UU(4) - UU(pcy)))
         else if katana_dir[p] == KATANA_DOWN
-            katana_y = pcy + 16
+            katana_y = pcy + 8
         katana_y = wrap_screen_y(katana_y)
 
         if katana_dir[p] == KATANA_LEFT
