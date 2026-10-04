@@ -29,8 +29,8 @@ ct Bool[SOLID_METATILE_COUNT] solid_metatile_table = Bool[SOLID_METATILE_COUNT](
     true
 )
 
-ct U katana_kill_min = 123
-ct U katana_kill_max = 127
+ct U katana_kill_min = 121
+ct U katana_kill_max = 124
 ct U KATANA_RIGHT = 0
 ct U KATANA_LEFT = 64
 ct U KATANA_UP = 1
@@ -93,8 +93,9 @@ ct U CORPSE_LEFT_TILE = 218
 ct U CORPSE_RIGHT_TILE = 219
 
 ct U KATANA_HORIZONTAL_START_TILE = 224
-ct U KATANA_HORIZONTAL_ACTIVE_TILE = 225
-ct U KATANA_HORIZONTAL_END_TILE = 226
+ct U KATANA_HORIZONTAL_ACTIVE_1_TILE = 225
+ct U KATANA_HORIZONTAL_ACTIVE_2_TILE = 226
+ct U KATANA_HORIZONTAL_END_TILE = 227
 ct U DEATH_PARTICLE_TILE = 227
 ct U KATANA_VERTICAL_START_TILE = 228
 ct U KATANA_VERTICAL_ACTIVE_TILE = 229
@@ -142,9 +143,10 @@ ct U[10] player_body_no_katana_sprite_tiles = U[10](
     PLAYER_WALL_SLIDE_NO_KATANA_HEAD_TILE, PLAYER_WALL_SLIDE_NO_KATANA_LEGS_TILE,
     PLAYER_EXTRA_NO_KATANA_HEAD_TILE, PLAYER_EXTRA_NO_KATANA_LEGS_TILE
 )
-ct U[3] katana_horizontal_sprite_tiles = U[3](
+ct U[4] katana_horizontal_sprite_tiles = U[4](
     KATANA_HORIZONTAL_START_TILE,
-    KATANA_HORIZONTAL_ACTIVE_TILE,
+    KATANA_HORIZONTAL_ACTIVE_1_TILE,
+    KATANA_HORIZONTAL_ACTIVE_2_TILE,
     KATANA_HORIZONTAL_END_TILE
 )
 ct U[3] katana_vertical_sprite_tiles = U[3](
@@ -1020,11 +1022,11 @@ fn katana_hitbox_base_y(U p) UU
     if katana_dir[p] == KATANA_DOWN
         return py + 8
 
-    return py + 4
+    return py
 
 fn katana_player_hitbox_y(U p) UU
     if katana_dir[p] == KATANA_RIGHT || katana_dir[p] == KATANA_LEFT
-        return (player_y[p] >> 4) + 3
+        return player_y[p] >> 4
 
     return katana_hitbox_base_y(p)
 
@@ -1032,7 +1034,7 @@ fn katana_clash_hitbox_y(U p) UU
     UU py = player_y[p] >> 4
 
     if katana_dir[p] == KATANA_RIGHT || katana_dir[p] == KATANA_LEFT
-        return py + 4
+        return py
     if katana_dir[p] == KATANA_UP
         if py >= 8
             return py - 8
@@ -1121,7 +1123,7 @@ fn draw_player(U p, U i) U
             katana_base_x = draw_x
 
         U katana_x = katana_base_x + 8
-        U katana_y = pcy + 4
+        U katana_y = pcy
         U katana_attr = 1
         U katana_tile = katana_horizontal_sprite_tiles[0]
 
@@ -1161,9 +1163,14 @@ fn draw_player(U p, U i) U
             if want_face[p] == KATANA_LEFT
                 katana_attr += ATTR_H_FLIP
 
-        if katana_time[p] >= 128
+        if katana_time[p] >= 125
             if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
                 katana_tile = katana_vertical_sprite_tiles[2]
+            else
+                katana_tile = katana_horizontal_sprite_tiles[3]
+        else if katana_time[p] >= 124
+            if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
+                katana_tile = katana_vertical_sprite_tiles[1]
             else
                 katana_tile = katana_horizontal_sprite_tiles[2]
         else if katana_time[p] >= 123
@@ -1325,7 +1332,7 @@ fn move_player_x(U p)
         katana_time[p] += 1
     if katana_time[p] > 120
         katana_time[p] += 1
-        if katana_time[p] > 130
+        if katana_time[p] > 125
             katana_time[p] = 90
     if (pads[p].pressed & BUTTON_B) && katana_time[p] == 120
         if pads[p].held & BUTTON_UP
