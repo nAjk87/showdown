@@ -78,11 +78,11 @@ ct U PLAYER_WALL_SLIDE_HEAD_TILE = 195
 ct U PLAYER_WALL_SLIDE_LEGS_TILE = 211
 ct U PLAYER_EXTRA_HEAD_TILE = 196
 ct U PLAYER_EXTRA_LEGS_TILE = 212
-ct U PLAYER_IDLE_NO_KATANA_HEAD_TILE = PLAYER_IDLE_HEAD_TILE
+ct U PLAYER_IDLE_NO_KATANA_HEAD_TILE = 99
 ct U PLAYER_IDLE_NO_KATANA_LEGS_TILE = 213
-ct U PLAYER_RUN_1_NO_KATANA_HEAD_TILE = PLAYER_RUN_1_HEAD_TILE
+ct U PLAYER_RUN_1_NO_KATANA_HEAD_TILE = 100
 ct U PLAYER_RUN_1_NO_KATANA_LEGS_TILE = 214
-ct U PLAYER_RUN_2_NO_KATANA_HEAD_TILE = PLAYER_RUN_2_HEAD_TILE
+ct U PLAYER_RUN_2_NO_KATANA_HEAD_TILE = 101
 ct U PLAYER_RUN_2_NO_KATANA_LEGS_TILE = 215
 ct U PLAYER_WALL_SLIDE_NO_KATANA_HEAD_TILE = 200
 ct U PLAYER_WALL_SLIDE_NO_KATANA_LEGS_TILE = 216
@@ -93,13 +93,12 @@ ct U CORPSE_LEFT_TILE = 218
 ct U CORPSE_RIGHT_TILE = 219
 
 ct U KATANA_HORIZONTAL_START_TILE = 224
-ct U KATANA_HORIZONTAL_ACTIVE_1_TILE = 225
-ct U KATANA_HORIZONTAL_ACTIVE_2_TILE = 226
-ct U KATANA_HORIZONTAL_END_TILE = 227
-ct U DEATH_PARTICLE_TILE = 227
-ct U KATANA_VERTICAL_START_TILE = 228
-ct U KATANA_VERTICAL_ACTIVE_TILE = 229
-ct U KATANA_VERTICAL_END_TILE = 230
+ct U KATANA_HORIZONTAL_ACTIVE_TILE = 225
+ct U KATANA_HORIZONTAL_END_TILE = 226
+ct U KATANA_VERTICAL_START_TILE = 227
+ct U KATANA_VERTICAL_ACTIVE_TILE = 228
+ct U KATANA_VERTICAL_END_TILE = 229
+ct U DEATH_PARTICLE_TILE = 230
 
 ct U HUD_LIFE_HEAD_TILE = PLAYER_IDLE_HEAD_TILE
 ct U[NUM_PLAYERS] HUD_LIFE_X = U[NUM_PLAYERS](0, 248, 0, 248)
@@ -143,10 +142,9 @@ ct U[10] player_body_no_katana_sprite_tiles = U[10](
     PLAYER_WALL_SLIDE_NO_KATANA_HEAD_TILE, PLAYER_WALL_SLIDE_NO_KATANA_LEGS_TILE,
     PLAYER_EXTRA_NO_KATANA_HEAD_TILE, PLAYER_EXTRA_NO_KATANA_LEGS_TILE
 )
-ct U[4] katana_horizontal_sprite_tiles = U[4](
+ct U[3] katana_horizontal_sprite_tiles = U[3](
     KATANA_HORIZONTAL_START_TILE,
-    KATANA_HORIZONTAL_ACTIVE_1_TILE,
-    KATANA_HORIZONTAL_ACTIVE_2_TILE,
+    KATANA_HORIZONTAL_ACTIVE_TILE,
     KATANA_HORIZONTAL_END_TILE
 )
 ct U[3] katana_vertical_sprite_tiles = U[3](
@@ -172,6 +170,8 @@ vars /game_vars
 
     U[NUM_PLAYERS] katana_time = U[NUM_PLAYERS](120,120,120,120)
     U[NUM_PLAYERS] katana_dir = U[NUM_PLAYERS](0,0,0,0)
+    U[NUM_PLAYERS] clash_flash_timer = U[NUM_PLAYERS](0,0,0,0)
+    U[NUM_PLAYERS] clash_flash_dir = U[NUM_PLAYERS](0,0,0,0)
     U[NUM_PLAYERS] death_timer = U[NUM_PLAYERS](0,0,0,0)
     U[NUM_PLAYERS] player_lives = U[NUM_PLAYERS](5,5,5,5)
     U[NUM_PLAYERS] player_life_flash_timer = U[NUM_PLAYERS](0,0,0,0)
@@ -569,6 +569,7 @@ fn start_player_death(U p, U attacker)
         death_timer[p] = RESPAWN_FRAMES
 
     katana_time[p] = 120
+    clash_flash_timer[p] = 0
     player_x_vel[p] = 0
     player_y_vel[p] = 0
     knockback_x_vel[p] = 0
@@ -715,6 +716,8 @@ fn respawn_player(U p)
     knockback_y_vel[p] = 0
     katana_time[p] = 120
     katana_dir[p] = face[p]
+    clash_flash_timer[p] = 0
+    clash_flash_dir[p] = katana_dir[p]
     player_sprite[p] = 0
     anim_timer[p] = 0
     anim_frame_index[p] = 0
@@ -990,9 +993,7 @@ fn katana_player_hitbox_x(U p) UU
     UU px = katana_hitbox_anchor_x(p)
 
     if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
-        if want_face[p] == KATANA_LEFT
-            return px
-        return px + 4
+        return px
 
     return katana_hitbox_base_x(p)
 
@@ -1006,9 +1007,7 @@ fn katana_clash_hitbox_x(U p) UU
             return px - 8
         return WORLD_WIDTH_PIXELS - (8 - px)
     if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
-        if want_face[p] == KATANA_LEFT
-            return px
-        return px + 5
+        return px
 
     return katana_hitbox_base_x(p)
 
@@ -1016,11 +1015,11 @@ fn katana_hitbox_base_y(U p) UU
     UU py = player_y[p] >> 4
 
     if katana_dir[p] == KATANA_UP
-        if py >= 8
-            return py - 8
-        return WORLD_HEIGHT_PIXELS - (8 - py)
+        if py >= 11
+            return py - 11
+        return WORLD_HEIGHT_PIXELS - (11 - py)
     if katana_dir[p] == KATANA_DOWN
-        return py + 8
+        return py + 11
 
     return py
 
@@ -1036,11 +1035,11 @@ fn katana_clash_hitbox_y(U p) UU
     if katana_dir[p] == KATANA_RIGHT || katana_dir[p] == KATANA_LEFT
         return py
     if katana_dir[p] == KATANA_UP
-        if py >= 8
-            return py - 8
-        return WORLD_HEIGHT_PIXELS - (8 - py)
+        if py >= 11
+            return py - 11
+        return WORLD_HEIGHT_PIXELS - (11 - py)
     if katana_dir[p] == KATANA_DOWN
-        return py + 8
+        return py + 11
 
     return katana_hitbox_base_y(p)
 
@@ -1073,6 +1072,8 @@ fn katana_clash_hitbox_h(U p) UU
     return 8
 
 fn katana_clash_player(U p)
+    clash_flash_timer[p] = 2
+    clash_flash_dir[p] = katana_dir[p]
     katana_time[p] = 90
     player_x_vel[p] = 0
     knockback_x_vel[p] = 40
@@ -1117,69 +1118,64 @@ fn draw_player(U p, U i) U
     set_oam_a(i, player_attr)
     i += 4
 
-    if katana_time[p] > 120
+    if katana_time[p] > 120 || clash_flash_timer[p] > 0
+        U visual_katana_dir = katana_dir[p]
+        if clash_flash_timer[p] > 0 && katana_time[p] <= 120
+            visual_katana_dir = clash_flash_dir[p]
+
         U katana_base_x = pcx
         if is_wall_sliding[p] && !is_player_on_ground[p]
             katana_base_x = draw_x
 
         U katana_x = katana_base_x + 8
         U katana_y = pcy
-        U katana_attr = 1
+        U katana_attr = p
         U katana_tile = katana_horizontal_sprite_tiles[0]
 
-        if katana_dir[p] == KATANA_LEFT
+        if visual_katana_dir == KATANA_LEFT
             if katana_base_x >= 8
                 katana_x = katana_base_x - 8
             else
                 katana_x = U(WORLD_WIDTH_PIXELS - (UU(8) - UU(katana_base_x)))
-        else if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
-            if want_face[p] == KATANA_LEFT
-                if katana_base_x > 6
-                    katana_x = katana_base_x - 6
-                else
-                    katana_x = 0
-            else
-                if katana_dir[p] == KATANA_DOWN
-                    katana_x = katana_base_x + 7
-                else
-                    katana_x = katana_base_x + 6
+        else if visual_katana_dir == KATANA_UP || visual_katana_dir == KATANA_DOWN
+            katana_x = katana_base_x
 
-        if katana_dir[p] == KATANA_UP
-            if pcy >= 4
-                katana_y = pcy - 4
+        if visual_katana_dir == KATANA_UP
+            if pcy >= 11
+                katana_y = pcy - 11
             else
-                katana_y = U(WORLD_HEIGHT_PIXELS - (UU(4) - UU(pcy)))
-        else if katana_dir[p] == KATANA_DOWN
-            katana_y = pcy + 8
+                katana_y = U(WORLD_HEIGHT_PIXELS - (UU(11) - UU(pcy)))
+        else if visual_katana_dir == KATANA_DOWN
+            katana_y = pcy + 11
         katana_y = wrap_screen_y(katana_y)
 
-        if katana_dir[p] == KATANA_LEFT
-            katana_attr = 1 + ATTR_H_FLIP
-        else if katana_dir[p] == KATANA_UP
-            katana_attr = 1 + ATTR_V_FLIP
+        if visual_katana_dir == KATANA_LEFT
+            katana_attr = p + ATTR_H_FLIP
+        else if visual_katana_dir == KATANA_UP
+            katana_attr = p + ATTR_V_FLIP
             if want_face[p] == KATANA_LEFT
                 katana_attr += ATTR_H_FLIP
-        else if katana_dir[p] == KATANA_DOWN
+        else if visual_katana_dir == KATANA_DOWN
             if want_face[p] == KATANA_LEFT
                 katana_attr += ATTR_H_FLIP
 
-        if katana_time[p] >= 125
-            if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
-                katana_tile = katana_vertical_sprite_tiles[2]
+        if clash_flash_timer[p] > 0 && katana_time[p] <= 120
+            if visual_katana_dir == KATANA_UP || visual_katana_dir == KATANA_DOWN
+                katana_tile = katana_vertical_sprite_tiles[0]
             else
-                katana_tile = katana_horizontal_sprite_tiles[3]
+                katana_tile = katana_horizontal_sprite_tiles[0]
         else if katana_time[p] >= 124
-            if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
-                katana_tile = katana_vertical_sprite_tiles[1]
+            if visual_katana_dir == KATANA_UP || visual_katana_dir == KATANA_DOWN
+                katana_tile = katana_vertical_sprite_tiles[2]
             else
                 katana_tile = katana_horizontal_sprite_tiles[2]
         else if katana_time[p] >= 123
-            if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
+            if visual_katana_dir == KATANA_UP || visual_katana_dir == KATANA_DOWN
                 katana_tile = katana_vertical_sprite_tiles[1]
             else
                 katana_tile = katana_horizontal_sprite_tiles[1]
         else
-            if katana_dir[p] == KATANA_UP || katana_dir[p] == KATANA_DOWN
+            if visual_katana_dir == KATANA_UP || visual_katana_dir == KATANA_DOWN
                 katana_tile = katana_vertical_sprite_tiles[0]
             else
                 katana_tile = katana_horizontal_sprite_tiles[0]
@@ -1325,6 +1321,8 @@ fn update_sprites()
 fn move_player_x(U p)
     normal_x_mov(p)
     apply_position_x_subpixel(p)
+    if clash_flash_timer[p] > 0
+        clash_flash_timer[p] -= 1
     // --------------------------------
     // KATANA
     // --------------------------------
@@ -1332,7 +1330,7 @@ fn move_player_x(U p)
         katana_time[p] += 1
     if katana_time[p] > 120
         katana_time[p] += 1
-        if katana_time[p] > 125
+        if katana_time[p] > 124
             katana_time[p] = 90
     if (pads[p].pressed & BUTTON_B) && katana_time[p] == 120
         if pads[p].held & BUTTON_UP
